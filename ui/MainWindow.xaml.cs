@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using CloudRedirect.Resources;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 using TextBlock = System.Windows.Controls.TextBlock;
@@ -91,8 +92,8 @@ public partial class MainWindow : FluentWindow
             var versionStr = result.TagName?.TrimStart('v') ?? result.TagName ?? "unknown";
             var body = result.Body?.Trim() ?? "";
 
-            UpdateBannerTitle.Text = $"Update available -- v{versionStr}";
-            UpdateBannerStatus.Text = "A new version of CloudRedirect is ready to install.";
+            UpdateBannerTitle.Text = S.Format("AppUpdate_AvailableTitle", versionStr);
+            UpdateBannerStatus.Text = S.Get("AppUpdate_AvailableStatus");
 
             if (!string.IsNullOrEmpty(body))
             {
@@ -123,7 +124,7 @@ public partial class MainWindow : FluentWindow
         UpdateSkipButton.Visibility = Visibility.Collapsed;
         UpdateReleaseNotesButton.Visibility = Visibility.Collapsed;
         UpdateChangelogScroll.Visibility = Visibility.Collapsed;
-        UpdateBannerStatus.Text = $"Downloading v{versionStr}...";
+        UpdateBannerStatus.Text = S.Format("AppUpdate_DownloadingFormat", versionStr);
         UpdateProgressBar.Visibility = Visibility.Visible;
         UpdateProgressBar.IsIndeterminate = true;
 
@@ -146,7 +147,7 @@ public partial class MainWindow : FluentWindow
         if (error != null)
         {
             // Show error, restore buttons so user can retry
-            UpdateBannerTitle.Text = "Update failed";
+            UpdateBannerTitle.Text = S.Get("AppUpdate_FailedTitle");
             UpdateBannerStatus.Text = error;
             UpdateProgressBar.Visibility = Visibility.Collapsed;
             UpdateBanner.Background = new System.Windows.Media.SolidColorBrush(

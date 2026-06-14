@@ -1,32 +1,32 @@
-<?xml version="1.0" encoding="utf-8"?>
-<root>
-  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
-    <xsd:element name="root" msdata:IsDataSet="true">
-      <xsd:complexType>
-        <xsd:choice maxOccurs="unbounded">
-          <xsd:element name="data">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="0" />
-              <xsd:attribute name="type" type="xsd:string" />
-              <xsd:attribute name="mimetype" type="xsd:string" />
-            </xsd:complexType>
-          </xsd:element>
-          <xsd:element name="resheader">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" use="required" />
-            </xsd:complexType>
-          </xsd:element>
-        </xsd:choice>
-      </xsd:complexType>
-    </xsd:element>
-  </xsd:schema>
+<?xml version='1.0' encoding='utf-8'?>
+<root xmlns:ns1="urn:schemas-microsoft-com:xml-msdata" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:schema id="root">
+    <xs:element name="root" ns1:IsDataSet="true">
+      <xs:complexType>
+        <xs:choice maxOccurs="unbounded">
+          <xs:element name="data">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
+                <xs:element name="comment" type="xsd:string" minOccurs="0" ns1:Ordinal="2" />
+              </xs:sequence>
+              <xs:attribute name="name" type="xsd:string" ns1:Ordinal="0" />
+              <xs:attribute name="type" type="xsd:string" />
+              <xs:attribute name="mimetype" type="xsd:string" />
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="resheader">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
+              </xs:sequence>
+              <xs:attribute name="name" type="xsd:string" use="required" />
+            </xs:complexType>
+          </xs:element>
+        </xs:choice>
+      </xs:complexType>
+    </xs:element>
+  </xs:schema>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
   </resheader>
@@ -39,7 +39,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-
   <data name="MainWindow_Title" xml:space="preserve">
     <value>CloudRedirect</value>
   </data>
@@ -73,7 +72,6 @@
   <data name="Nav_ChoiceMode" xml:space="preserve">
     <value>Modo</value>
   </data>
-
   <data name="Choice_Title" xml:space="preserve">
     <value>Elige tu modo</value>
   </data>
@@ -113,7 +111,6 @@
   <data name="Choice_FailedSaveMode" xml:space="preserve">
     <value>No se pudo guardar tu selección: {0}</value>
   </data>
-
   <data name="Setup_Title" xml:space="preserve">
     <value>Configuración</value>
   </data>
@@ -216,7 +213,6 @@
   <data name="Setup_Ready" xml:space="preserve">
     <value>Listo.</value>
   </data>
-
   <data name="Setup_SteamNotFoundManual" xml:space="preserve">
     <value>No encontrado -- haz clic en Cambiar para establecerlo manualmente</value>
   </data>
@@ -459,7 +455,6 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="Setup_UninstallDllTitle" xml:space="preserve">
     <value>Desinstalar DLL</value>
   </data>
-
   <data name="Dashboard_Title" xml:space="preserve">
     <value>Panel</value>
   </data>
@@ -505,7 +500,6 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="Dashboard_RestartSteam" xml:space="preserve">
     <value>Reiniciar Steam</value>
   </data>
-
   <data name="Dashboard_NotFound" xml:space="preserve">
     <value>No encontrado</value>
   </data>
@@ -594,7 +588,6 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="Dashboard_CouldNotFindSteam" xml:space="preserve">
     <value>No se pudo encontrar la instalación de Steam.</value>
   </data>
-
   <data name="CloudProvider_Title" xml:space="preserve">
     <value>Proveedor de nube</value>
   </data>
@@ -610,6 +603,12 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="CloudProvider_OneDrive" xml:space="preserve">
     <value>OneDrive</value>
   </data>
+  <data name="CloudProvider_WebDAV" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
+  <data name="CloudProvider_Quark" xml:space="preserve">
+    <value>Quark Netdisk (OpenList)</value>
+  </data>
   <data name="CloudProvider_FolderMappedDrive" xml:space="preserve">
     <value>Carpeta / Unidad asignada</value>
   </data>
@@ -619,8 +618,20 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="CloudProvider_TokenFilePath" xml:space="preserve">
     <value>Ruta del archivo de token</value>
   </data>
+  <data name="CloudProvider_WebDAVConfigPath" xml:space="preserve">
+    <value>Ruta de configuración WebDAV</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigPath" xml:space="preserve">
+    <value>Ruta de configuración de Quark OpenList</value>
+  </data>
   <data name="CloudProvider_TokenPlaceholder" xml:space="preserve">
     <value>Ruta al archivo de tokens OAuth</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigPlaceholder" xml:space="preserve">
+    <value>Ruta a webdav.json</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigPlaceholder" xml:space="preserve">
+    <value>Ruta a quark_openlist.json</value>
   </data>
   <data name="CloudProvider_Browse" xml:space="preserve">
     <value>Examinar</value>
@@ -643,7 +654,27 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="CloudProvider_SaveConfiguration" xml:space="preserve">
     <value>Guardar configuración</value>
   </data>
-
+  <data name="CloudProvider_TestConnection" xml:space="preserve">
+    <value>Test Connection</value>
+  </data>
+  <data name="CloudProvider_TestingProvider" xml:space="preserve">
+    <value>Testing provider: {0}</value>
+  </data>
+  <data name="CloudProvider_TestingConnection" xml:space="preserve">
+    <value>Testing connection...</value>
+  </data>
+  <data name="CloudProvider_TestConnectionSuccess" xml:space="preserve">
+    <value>Connection test succeeded.</value>
+  </data>
+  <data name="CloudProvider_TestConnectionFailedWithError" xml:space="preserve">
+    <value>Connection test failed: {0}</value>
+  </data>
+  <data name="CloudProvider_InvalidCliResponse" xml:space="preserve">
+    <value>Invalid CLI response: {0}</value>
+  </data>
+  <data name="CloudProvider_CliUnavailable" xml:space="preserve">
+    <value>Embedded CLI executable not available</value>
+  </data>
   <data name="CloudProvider_NoConfigFound" xml:space="preserve">
     <value>No se encontró config.json -- usando valores predeterminados</value>
   </data>
@@ -658,6 +689,12 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   </data>
   <data name="CloudProvider_SyncFolderHint" xml:space="preserve">
     <value>Elige cualquier carpeta -- incluyendo una unidad de red asignada, USB o recurso NAS.</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigHint" xml:space="preserve">
+    <value>Campos JSON: server_url, username, password, remote_root_path. WebDAV genérico usa HTTPS.</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigHint" xml:space="preserve">
+    <value>Campos JSON: cookie, openlist_exe, data_dir, admin_password, base_url, remote_root_path. El token API solo se mantiene en memoria.</value>
   </data>
   <data name="CloudProvider_LocalStoragePath" xml:space="preserve">
     <value>Ruta de almacenamiento local</value>
@@ -704,7 +741,60 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="CloudProvider_NoTokenFilePath" xml:space="preserve">
     <value>No se especificó ruta de archivo de token</value>
   </data>
-
+  <data name="CloudProvider_NoWebDAVConfigPath" xml:space="preserve">
+    <value>No se especificó ruta de configuración WebDAV</value>
+  </data>
+  <data name="CloudProvider_NoQuarkConfigPath" xml:space="preserve">
+    <value>No se especificó ruta de configuración de Quark OpenList</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigFound" xml:space="preserve">
+    <value>Archivo de configuración WebDAV encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigFound" xml:space="preserve">
+    <value>Archivo de configuración de Quark OpenList encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigMissing" xml:space="preserve">
+    <value>Archivo de configuración WebDAV no encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigMissing" xml:space="preserve">
+    <value>Archivo de configuración de Quark OpenList no encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_WebDAVSettings" xml:space="preserve">
+    <value>WebDAV Settings</value>
+  </data>
+  <data name="CloudProvider_WebDAVServerUrlPlaceholder" xml:space="preserve">
+    <value>Server URL, e.g. https://example.com/dav</value>
+  </data>
+  <data name="CloudProvider_WebDAVUsernamePlaceholder" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="CloudProvider_WebDAVPasswordPlaceholder" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="CloudProvider_WebDAVRemoteRootPlaceholder" xml:space="preserve">
+    <value>Remote root path, e.g. /CloudRedirect</value>
+  </data>
+  <data name="CloudProvider_QuarkSettings" xml:space="preserve">
+    <value>Quark OpenList Settings</value>
+  </data>
+  <data name="CloudProvider_QuarkCookieHint" xml:space="preserve">
+    <value>Paste your Quark Cookie. It is saved to quark_openlist.json like GameSaveCloudQt; OpenList API tokens are kept in memory only.</value>
+  </data>
+  <data name="CloudProvider_QuarkCookiePlaceholder" xml:space="preserve">
+    <value>Quark Cookie</value>
+  </data>
+  <data name="CloudProvider_OpenListPathPlaceholder" xml:space="preserve">
+    <value>OpenList executable path</value>
+  </data>
+  <data name="CloudProvider_OpenListDataDirPlaceholder" xml:space="preserve">
+    <value>OpenList data directory</value>
+  </data>
+  <data name="CloudProvider_QuarkRemoteRootPlaceholder" xml:space="preserve">
+    <value>Remote root path, e.g. /Quark/CloudRedirect</value>
+  </data>
+  <data name="CloudProvider_QuarkForceStorageUpdate" xml:space="preserve">
+    <value>Force update OpenList Quark storage on next connection</value>
+  </data>
   <data name="Apps_Title" xml:space="preserve">
     <value>Apps</value>
   </data>
@@ -735,7 +825,6 @@ Si omites esto, las partidas se almacenarán localmente en tu carpeta de Steam.<
   <data name="Apps_LoadingBackups" xml:space="preserve">
     <value>Cargando copias de seguridad...</value>
   </data>
-
   <data name="Apps_DeleteAllSavesTitle" xml:space="preserve">
     <value>Eliminar todas las partidas</value>
   </data>
@@ -819,8 +908,6 @@ Puedes restaurar desde el panel de Restaurar partidas.</value>
   <data name="Apps_DeleteFailedTitle" xml:space="preserve">
     <value>La eliminación falló</value>
   </data>
-
-  <!-- AppsPage orphan-blob prune -->
   <data name="Apps_ScanForOrphans" xml:space="preserve">
     <value>Buscar huérfanos en la nube</value>
   </data>
@@ -956,7 +1043,6 @@ Detalles: {5}</value>
 
 Detalles: {2}</value>
   </data>
-
   <data name="Apps_SteamNotFound" xml:space="preserve">
     <value>Steam no encontrado</value>
   </data>
@@ -979,7 +1065,7 @@ La copia contiene: {1} archivo(s) ({2})
 Apps: {3}
 
 IMPORTANTE: Antes de restaurar, debes desactivar Steam Cloud para este juego:
-  Steam > clic derecho en el juego > Propiedades > General >
+  Steam &gt; clic derecho en el juego &gt; Propiedades &gt; General &gt;
   desmarca "Mantener partidas guardadas en Steam Cloud"
 
 Si Steam Cloud está activado, Steam puede sobrescribir los archivos restaurados.
@@ -1018,7 +1104,6 @@ Se omitieron {0} archivo(s) (ya existen en la ubicación original).</value>
   <data name="Apps_AppFallbackName" xml:space="preserve">
     <value>App {0}</value>
   </data>
-
   <data name="Cleanup_Title" xml:space="preserve">
     <value>Limpieza</value>
   </data>
@@ -1061,7 +1146,6 @@ Se omitieron {0} archivo(s) (ya existen en la ubicación original).</value>
   <data name="Cleanup_LoadingBackups" xml:space="preserve">
     <value>Cargando copias de seguridad...</value>
   </data>
-
   <data name="Cleanup_SteamNotFound" xml:space="preserve">
     <value>Steam no encontrado</value>
   </data>
@@ -1163,7 +1247,6 @@ Se omitieron {0} archivo(s) (ya existen en la ubicación original).</value>
   <data name="Cleanup_UndoCompleteTitle" xml:space="preserve">
     <value>Deshacer completo</value>
   </data>
-
   <data name="Cleanup_Badge_CrossApp" xml:space="preserve">
     <value>cross-app</value>
   </data>
@@ -1182,7 +1265,6 @@ Se omitieron {0} archivo(s) (ya existen en la ubicación original).</value>
   <data name="Cleanup_Badge_Unknown" xml:space="preserve">
     <value>unknown</value>
   </data>
-
   <data name="Cleanup_SuspectFiles" xml:space="preserve">
     <value>Archivos sospechosos</value>
   </data>
@@ -1238,7 +1320,6 @@ Ubicación de la copia: cloud_redirect/cleanup_tab_backup/{2}/
 
 Los archivos se pueden restaurar desde la pestaña Restaurar. ¿Continuar?</value>
   </data>
-
   <data name="Settings_Title" xml:space="preserve">
     <value>Ajustes</value>
   </data>
@@ -1281,7 +1362,6 @@ Los archivos se pueden restaurar desde la pestaña Restaurar. ¿Continuar?</valu
   <data name="Settings_GitHub" xml:space="preserve">
     <value>GitHub</value>
   </data>
-
   <data name="Settings_VersionFormat" xml:space="preserve">
     <value>{0}.{1}.{2}</value>
   </data>
@@ -1331,7 +1411,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Settings_FailedReset" xml:space="preserve">
     <value>Error al restablecer: {0}</value>
   </data>
-
   <data name="Disclaimer_WindowTitle" xml:space="preserve">
     <value>ADVERTENCIA</value>
   </data>
@@ -1380,14 +1459,12 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Disclaimer_AcceptButton" xml:space="preserve">
     <value>Entiendo los riesgos</value>
   </data>
-
   <data name="Disclaimer_CountdownFormat" xml:space="preserve">
     <value>Por favor lee con cuidado... ({0}s)</value>
   </data>
   <data name="Disclaimer_Warned" xml:space="preserve">
     <value>Has sido advertido.</value>
   </data>
-
   <data name="Dialog_OK" xml:space="preserve">
     <value>OK</value>
   </data>
@@ -1403,19 +1480,23 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Dialog_YesDeleteEverything" xml:space="preserve">
     <value>Sí -- ELIMINAR TODO</value>
   </data>
-
   <data name="Steam_IsRunningTitle" xml:space="preserve">
     <value>Steam está en ejecución</value>
   </data>
   <data name="Steam_IsRunningMessage" xml:space="preserve">
     <value>Steam debe estar cerrado antes de continuar. Cierra Steam e intenta de nuevo.</value>
   </data>
-
   <data name="Provider_GoogleDrive" xml:space="preserve">
     <value>Google Drive</value>
   </data>
   <data name="Provider_OneDrive" xml:space="preserve">
     <value>OneDrive</value>
+  </data>
+  <data name="Provider_WebDAV" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
+  <data name="Provider_Quark" xml:space="preserve">
+    <value>Quark Netdisk (OpenList)</value>
   </data>
   <data name="Provider_FolderNetworkDrive" xml:space="preserve">
     <value>Carpeta / Unidad de red</value>
@@ -1423,7 +1504,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Provider_LocalOnly" xml:space="preserve">
     <value>Solo local</value>
   </data>
-
   <data name="Backup_UnknownApp" xml:space="preserve">
     <value>App desconocida</value>
   </data>
@@ -1457,7 +1537,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Backup_NoFilesOnDisk" xml:space="preserve">
     <value>No se encontraron archivos de copia de seguridad en disco</value>
   </data>
-
   <data name="Preview_SummaryFormat" xml:space="preserve">
     <value>Vista previa: {0} archivo(s) se restaurarían, {1} omitido(s) (ya existen), {2} remotecache(s)</value>
   </data>
@@ -1471,14 +1550,12 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Preview_FailedTitle" xml:space="preserve">
     <value>Vista previa falló</value>
   </data>
-
   <data name="EmbeddedDll_NotEmbedded" xml:space="preserve">
     <value>cloud_redirect.dll no está incluida en esta compilación</value>
   </data>
   <data name="EmbeddedDll_InUse" xml:space="preserve">
     <value>cloud_redirect.dll está en uso (cierra Steam primero)</value>
   </data>
-
   <data name="Common_Info" xml:space="preserve">
     <value>Información</value>
   </data>
@@ -1488,7 +1565,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Common_UpdateFailed" xml:space="preserve">
     <value>La actualización falló</value>
   </data>
-
   <data name="OAuth_AuthSuccessTitle" xml:space="preserve">
     <value>Autorización exitosa</value>
   </data>
@@ -1501,7 +1577,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="OAuth_AuthFailedBody" xml:space="preserve">
     <value>Cierra esta pestaña e intenta de nuevo.</value>
   </data>
-
   <data name="Settings_Language" xml:space="preserve">
     <value>Idioma</value>
   </data>
@@ -1525,6 +1600,9 @@ Esto puede causar pérdida de datos en algunos casos.
   </data>
   <data name="Settings_LanguageEnglish" xml:space="preserve">
     <value>English</value>
+  </data>
+  <data name="Settings_LanguageChineseSimplified" xml:space="preserve">
+    <value>Chino simplificado</value>
   </data>
   <data name="Settings_LanguageSpanish" xml:space="preserve">
     <value>Español</value>
@@ -1562,14 +1640,12 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Settings_AutoUpdateDllHint" xml:space="preserve">
     <value>Buscar e instalar automáticamente versiones más nuevas del DLL de CloudRedirect cuando Steam se inicie. La actualización se aplica en el siguiente reinicio de Steam.</value>
   </data>
-
   <data name="Settings_CloudRedirectEnabled" xml:space="preserve">
     <value>Activar redirección de guardados en la nube</value>
   </data>
   <data name="Settings_CloudRedirectEnabledHint" xml:space="preserve">
     <value>Cuando está activado, los guardados en la nube de las apps lua son interceptados y almacenados localmente (y opcionalmente sincronizados con tu proveedor de nube). Cuando está desactivado, solo la fijación de manifiestos y los parches están activos. Los cambios se aplican al reiniciar Steam.</value>
   </data>
-
   <data name="Settings_ManifestPinning" xml:space="preserve">
     <value>Fijación de manifiestos</value>
   </data>
@@ -1588,7 +1664,6 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Settings_AutoCommentHint" xml:space="preserve">
     <value>Cuando está activado, el SetManifestID especificado en el lua se tratará como si estuviera comentado. Si está desactivado, se respetará el SetManifestID, lo que significa que tu juego quedará bloqueado en la versión especificada en el lua. Esta opción nunca modifica los archivos lua en disco.</value>
   </data>
-
   <data name="Pin_PerAppTitle" xml:space="preserve">
     <value>Apps lua</value>
   </data>
@@ -1619,16 +1694,46 @@ Esto puede causar pérdida de datos en algunos casos.
   <data name="Pin_FailedSavePinConfig" xml:space="preserve">
     <value>No se pudo guardar la configuración de fijado: {0}</value>
   </data>
-
   <data name="Search_Placeholder" xml:space="preserve">
     <value>Buscar por nombre o ID de app...</value>
   </data>
-
+  <data name="Settings_Parental" xml:space="preserve">
+    <value>Tung Tung</value>
+  </data>
+  <data name="Settings_ParentalHint" xml:space="preserve">
+    <value>Six...six seven?</value>
+  </data>
+  <data name="Settings_ParentalIgnorePlaytime" xml:space="preserve">
+    <value>Ignorar restricciones de tiempo de juego</value>
+  </data>
+  <data name="Settings_ParentalIgnorePlaytimeHint" xml:space="preserve">
+    <value>Desactiva las restricciones de tiempo de juego. Informa el tiempo hasta el limite configurado, pero no mas alla.</value>
+  </data>
+  <data name="Settings_ParentalBypassPlaytime" xml:space="preserve">
+    <value>Desactivar restricciones familiares</value>
+  </data>
+  <data name="Settings_ParentalBypassPlaytimeHint" xml:space="preserve">
+    <value>No se aplica ninguna restriccion familiar del cliente.</value>
+  </data>
   <data name="AppUpdate_Skip" xml:space="preserve">
     <value>Omitir</value>
   </data>
   <data name="AppUpdate_UpdateNow" xml:space="preserve">
     <value>Actualizar ahora</value>
   </data>
-
+  <data name="AppUpdate_ReleaseNotes" xml:space="preserve">
+    <value>Notas de la versión</value>
+  </data>
+  <data name="AppUpdate_AvailableTitle" xml:space="preserve">
+    <value>Actualización disponible -- v{0}</value>
+  </data>
+  <data name="AppUpdate_AvailableStatus" xml:space="preserve">
+    <value>Hay una nueva versión de CloudRedirect lista para instalar.</value>
+  </data>
+  <data name="AppUpdate_DownloadingFormat" xml:space="preserve">
+    <value>Descargando v{0}...</value>
+  </data>
+  <data name="AppUpdate_FailedTitle" xml:space="preserve">
+    <value>Error al actualizar</value>
+  </data>
 </root>

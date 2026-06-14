@@ -157,7 +157,7 @@ namespace CloudRedirect.Services.Patching
             var iv = raw.AsSpan(0, 16).ToArray();
             var ct = raw.AsSpan(16).ToArray();
 
-            Log("  Decrypting..");
+            Log("  正在解密...");
             byte[] dec;
             try { dec = PayloadCrypto.AesCbcDecrypt(ct, AesKey, iv); }
             catch (Exception ex) { return (null, null, $"Decryption failed: {ex.Message}"); }
@@ -177,7 +177,7 @@ namespace CloudRedirect.Services.Patching
             }
             catch (Exception ex) { return (null, null, $"Decompression failed: {ex.Message}"); }
 
-            Log($"  Payload: {payload.Length} bytes");
+            Log($"  Payload：{payload.Length} 字节");
             return (payload, iv, null);
         }
 
@@ -251,37 +251,37 @@ namespace CloudRedirect.Services.Patching
                             var existing = ReadFileShared(destPath);
                             if (ComputeSha256(existing) == hash)
                             {
-                                Log($"  {name}: already present, hash OK");
+                                Log($"  {name}：已存在，哈希校验通过");
                                 continue;
                             }
-                            Log($"  {name}: present but hash mismatch, re-downloading..");
+                            Log($"  {name}：已存在但哈希不匹配，正在重新下载...");
                         }
                         catch (IOException)
                         {
-                            Log($"  {name}: could not read existing file, re-downloading..");
+                            Log($"  {name}：无法读取现有文件，正在重新下载...");
                         }
                     }
 
                     byte[] data = null;
                     bool fromFallback = false;
 
-                    Log($"Downloading {name}..");
+                    Log($"正在下载 {name}...");
                     try
                     {
                         var dl = await http.GetByteArrayAsync(url).ConfigureAwait(false);
                         if (dl != null && dl.Length > 0 && ComputeSha256(dl) == hash)
                             data = dl;
                         else
-                            Log($"  Primary returned bad data (len={dl?.Length ?? 0})");
+                            Log($"  主下载源返回的数据无效（长度={dl?.Length ?? 0}）");
                     }
                     catch (Exception ex)
                     {
-                        Log($"  Primary failed: {ex.Message}");
+                        Log($"  主下载源失败：{ex.Message}");
                     }
 
                     if (data == null)
                     {
-                        Log($"  Trying fallback..");
+                        Log("  正在尝试备用下载源...");
                         try
                         {
                             var dl = await http.GetByteArrayAsync(fallback).ConfigureAwait(false);
@@ -291,35 +291,35 @@ namespace CloudRedirect.Services.Patching
                                 fromFallback = true;
                             }
                             else
-                                Log($"  Fallback returned bad data (len={dl?.Length ?? 0})");
+                                Log($"  备用下载源返回的数据无效（长度={dl?.Length ?? 0}）");
                         }
                         catch (Exception ex)
                         {
-                            Log($"  Fallback failed: {ex.Message}");
+                            Log($"  备用下载源失败：{ex.Message}");
                         }
                     }
 
                     if (data == null)
-                        return result.Fail($"Could not download {name}: no source returned a valid file");
+                        return result.Fail($"无法下载 {name}：没有下载源返回有效文件");
 
                     try
                     {
                         FileUtils.AtomicWriteAllBytes(destPath, data);
-                        Log($"  {name}: {data.Length} bytes" + (fromFallback ? " (fallback)" : ""));
+                        Log($"  {name}：{data.Length} 字节" + (fromFallback ? "（备用源）" : ""));
                     }
                     catch (IOException ex)
                     {
-                        return result.Fail($"Could not write {name}: {ex.Message}");
+                        return result.Fail($"无法写入 {name}：{ex.Message}");
                     }
                 }
 
                 result.DllPatched = true;
                 result.Succeeded = true;
-                Log("DLL repair complete.");
+                Log("DLL 修复完成。");
             }
             catch (Exception ex)
             {
-                result.Fail($"Unexpected error: {ex.Message}");
+                result.Fail($"意外错误：{ex.Message}");
             }
 
             return result;
@@ -398,55 +398,55 @@ namespace CloudRedirect.Services.Patching
             var version = SteamDetector.GetSteamVersion(_steamPath);
             if (version == null)
             {
-                Log("  WARNING: Could not read Steam version from manifest");
-                return result.Fail("Steam version could not be determined. Cannot safely patch.");
+                Log("  警告：无法从 manifest 读取 Steam 版本");
+                return result.Fail("无法确定 Steam 版本，不能安全修补。");
             }
             if (!SteamDetector.IsSupportedSteamVersion(version.Value))
             {
                 var supported = string.Join(", ", SteamDetector.SupportedSteamVersions);
-                Log($"  Steam version: {version.Value} (UNSUPPORTED)");
-                Log($"  Supported versions: {supported}");
+                Log($"  Steam 版本：{version.Value}（不支持）");
+                Log($"  支持的版本：{supported}");
                 return result.Fail(
-                    $"Steam version mismatch: installed {version.Value}, " +
-                    $"supported {supported}. " +
-                    "Patching an unsupported version risks corrupting steamclient64.dll. " +
-                    "Update CloudRedirect or downgrade Steam.");
+                    $"Steam 版本不匹配：已安装 {version.Value}，" +
+                    $"支持 {supported}。" +
+                    "修补不受支持的版本可能损坏 steamclient64.dll。" +
+                    "请更新 CloudRedirect 或降级 Steam。");
             }
-            Log($"  Steam version: {version.Value} (OK)");
+            Log($"  Steam 版本：{version.Value}（正常）");
 
             try
             {
                 var hijackDll = FindCoreDll();
                 if (hijackDll == null)
-                    return result.Fail("SteamTools Core DLL not found. Is SteamTools installed?");
+                    return result.Fail("未找到 SteamTools 核心 DLL。是否已安装 SteamTools？");
 
                 var dllPath = Path.Combine(_steamPath, hijackDll);
                 byte[] dllData;
                 try { dllData = ReadFileShared(dllPath); }
-                catch (IOException) { return result.Fail($"{hijackDll} is in use - close Steam first"); }
+                catch (IOException) { return result.Fail($"{hijackDll} 正在使用中，请先关闭 Steam"); }
 
-                Log($"Patching {hijackDll}..");
+                Log($"正在修补 {hijackDll}...");
                 var resolvedCore = ResolveCorePatchOffsets(dllData);
                 if (resolvedCore == null)
-                    return result.Fail($"Could not identify patch locations in {hijackDll} - unsupported version?");
+                    return result.Fail($"无法识别 {hijackDll} 中的补丁位置——可能是不支持的版本");
 
                 var (patchedDll, dllApplied, dllSkipped, dllErrors) = ApplyPatches(dllData, resolvedCore);
                 if (dllErrors.Count > 0)
                 {
                     foreach (var err in dllErrors) Log(err);
-                    return result.Fail("Byte mismatch in " + hijackDll + " - wrong version?");
+                    return result.Fail(hijackDll + " 字节不匹配——可能版本不正确");
                 }
 
                 var cachePath = Fingerprint.FindCachePath(_steamPath, log: _log);
                 if (cachePath == null)
                 {
-                    Log("Payload cache not found. Deploying embedded payload..");
+                    Log("未找到 payload 缓存，正在部署内置 payload...");
                     cachePath = DeployEmbeddedPayload();
                     if (cachePath == null)
-                        return result.Fail("Could not deploy payload cache.");
+                        return result.Fail("无法部署 payload 缓存。");
                 }
 
-                Log("Patching payload (offline setup)..");
+                Log("正在修补 payload（离线设置）...");
 
                 var (payload, iv, plErr) = ReadAndDecryptPayload(cachePath);
                 if (payload == null)
@@ -454,13 +454,13 @@ namespace CloudRedirect.Services.Patching
 
                 var resolvedSetup = ResolveSetupPatchOffsets(payload);
                 if (resolvedSetup == null || resolvedSetup.Length == 0)
-                    return result.Fail("Could not identify activation patch locations in payload - unsupported version?");
+                    return result.Fail("无法识别 payload 中的激活补丁位置——可能是不支持的版本");
 
                 var (patchedPayload, plApplied, plSkipped, plErrors) = ApplyPatches(payload, resolvedSetup);
                 if (plErrors.Count > 0)
                 {
                     foreach (var err in plErrors) Log(err);
-                    return result.Fail("Byte mismatch in payload - wrong version?");
+                    return result.Fail("payload 字节不匹配——可能版本不正确");
                 }
 
                 // Backup both before either write so partial states are recoverable.
@@ -471,32 +471,32 @@ namespace CloudRedirect.Services.Patching
                 if (plApplied > 0)
                 {
                     ReEncryptAndWrite(cachePath, patchedPayload, iv);
-                    Log($"  {plApplied} patch(es) applied to payload" + (plSkipped > 0 ? $", {plSkipped} already done" : ""));
+                    Log($"  已向 payload 应用 {plApplied} 个补丁" + (plSkipped > 0 ? $"，{plSkipped} 个已存在" : ""));
                 }
                 else
                 {
-                    Log("  Payload: already patched");
+                    Log("  Payload：已修补");
                 }
                 result.CachePatched = true;
 
                 if (dllApplied > 0)
                 {
                     FileUtils.AtomicWriteAllBytes(dllPath, patchedDll);
-                    Log($"  {dllApplied} patch(es) applied to {hijackDll}" + (dllSkipped > 0 ? $", {dllSkipped} already done" : ""));
+                    Log($"  已向 {hijackDll} 应用 {dllApplied} 个补丁" + (dllSkipped > 0 ? $"，{dllSkipped} 个已存在" : ""));
                 }
                 else
                 {
-                    Log($"  {hijackDll}: already patched");
+                    Log($"  {hijackDll}：已修补");
                 }
                 result.DllPatched = true;
 
                 result.Succeeded = true;
-                Log("Done.");
+                Log("完成。");
             }
             catch (Exception ex)
             {
-                result.Fail($"Unexpected error: {ex.Message}");
-                Log($"Error: {ex.Message}");
+                result.Fail($"意外错误：{ex.Message}");
+                Log($"错误：{ex.Message}");
             }
 
             return result;
@@ -510,47 +510,47 @@ namespace CloudRedirect.Services.Patching
             var version = SteamDetector.GetSteamVersion(_steamPath);
             if (version == null)
             {
-                Log("  WARNING: Could not read Steam version from manifest");
-                return result.Fail("Steam version could not be determined. Cannot safely revert.");
+                Log("  警告：无法从 manifest 读取 Steam 版本");
+                return result.Fail("无法确定 Steam 版本，不能安全还原。");
             }
             if (!SteamDetector.IsSupportedSteamVersion(version.Value))
             {
                 var supported = string.Join(", ", SteamDetector.SupportedSteamVersions);
-                Log($"  Steam version: {version.Value} (UNSUPPORTED)");
-                Log($"  Supported versions: {supported}");
+                Log($"  Steam 版本：{version.Value}（不支持）");
+                Log($"  支持的版本：{supported}");
                 return result.Fail(
-                    $"Steam version mismatch: installed {version.Value}, " +
-                    $"supported {supported}. " +
-                    "Reverting on an unsupported version risks corrupting steamclient64.dll. " +
-                    "Update CloudRedirect or downgrade Steam.");
+                    $"Steam 版本不匹配：已安装 {version.Value}，" +
+                    $"支持 {supported}。" +
+                    "在不受支持的版本上还原可能损坏 steamclient64.dll。" +
+                    "请更新 CloudRedirect 或降级 Steam。");
             }
-            Log($"  Steam version: {version.Value} (OK)");
+            Log($"  Steam 版本：{version.Value}（正常）");
 
             try
             {
                 var hijackDll = FindCoreDll();
                 if (hijackDll == null)
-                    return result.Fail("SteamTools Core DLL not found.");
+                    return result.Fail("未找到 SteamTools 核心 DLL。");
 
                 var dllPath = Path.Combine(_steamPath, hijackDll);
                 byte[] dllData;
                 try { dllData = ReadFileShared(dllPath); }
-                catch (IOException) { return result.Fail($"{hijackDll} is in use - close Steam first"); }
+                catch (IOException) { return result.Fail($"{hijackDll} 正在使用中，请先关闭 Steam"); }
 
                 var resolvedCore = ResolveCorePatchOffsets(dllData);
                 if (resolvedCore == null)
-                    return result.Fail($"Could not identify patch locations in {hijackDll}");
+                    return result.Fail($"无法识别 {hijackDll} 中的补丁位置");
 
                 var (revertedDll, dllReverted, dllSkipped, dllErrors) = UnapplyPatches(dllData, resolvedCore);
                 if (dllErrors.Count > 0)
                 {
                     foreach (var err in dllErrors) Log(err);
-                    return result.Fail("Byte mismatch in " + hijackDll);
+                    return result.Fail(hijackDll + " 字节不匹配");
                 }
 
                 var cachePath = Fingerprint.FindCachePath(_steamPath, verbose: false, log: _log);
                 if (cachePath == null)
-                    return result.Fail("Payload cache not found.");
+                    return result.Fail("未找到 payload 缓存。");
 
                 var (payload, iv, plErr) = ReadAndDecryptPayload(cachePath);
                 if (payload == null)
@@ -558,13 +558,13 @@ namespace CloudRedirect.Services.Patching
 
                 var resolvedSetup = ResolveSetupPatchOffsets(payload);
                 if (resolvedSetup == null)
-                    return result.Fail("Could not identify patch locations in payload");
+                    return result.Fail("无法识别 payload 中的补丁位置");
 
                 var (revertedPayload, plReverted, plSkipped, plErrors) = UnapplyPatches(payload, resolvedSetup);
                 if (plErrors.Count > 0)
                 {
                     foreach (var err in plErrors) Log(err);
-                    return result.Fail("Byte mismatch in payload");
+                    return result.Fail("payload 字节不匹配");
                 }
 
                 // Backup both before either write (see ApplyOfflineSetup).
@@ -576,30 +576,30 @@ namespace CloudRedirect.Services.Patching
                 if (plReverted > 0)
                 {
                     ReEncryptAndWrite(cachePath, revertedPayload, iv);
-                    Log($"  {plReverted} patch(es) reverted in payload" + (plSkipped > 0 ? $", {plSkipped} already original" : ""));
+                    Log($"  已在 payload 中还原 {plReverted} 个补丁" + (plSkipped > 0 ? $"，{plSkipped} 个已是原始状态" : ""));
                 }
                 else
                 {
-                    Log("  Payload: already original");
+                    Log("  Payload：已是原始状态");
                 }
 
                 if (dllReverted > 0)
                 {
                     FileUtils.AtomicWriteAllBytes(dllPath, revertedDll);
-                    Log($"  {dllReverted} patch(es) reverted in {hijackDll}" + (dllSkipped > 0 ? $", {dllSkipped} already original" : ""));
+                    Log($"  已在 {hijackDll} 中还原 {dllReverted} 个补丁" + (dllSkipped > 0 ? $"，{dllSkipped} 个已是原始状态" : ""));
                 }
                 else
                 {
-                    Log($"  {hijackDll}: already original");
+                    Log($"  {hijackDll}：已是原始状态");
                 }
 
                 result.Succeeded = true;
-                Log("Offline setup reverted.");
+                Log("离线设置补丁已还原。");
             }
             catch (Exception ex)
             {
-                result.Fail($"Unexpected error: {ex.Message}");
-                Log($"Error: {ex.Message}");
+                result.Fail($"意外错误：{ex.Message}");
+                Log($"错误：{ex.Message}");
             }
 
             return result;
@@ -1164,54 +1164,54 @@ namespace CloudRedirect.Services.Patching
             var version = SteamDetector.GetSteamVersion(_steamPath);
             if (version == null)
             {
-                Log("  WARNING: Could not read Steam version from manifest");
-                return result.Fail("Steam version could not be determined. Cannot safely patch.");
+                Log("  警告：无法从 manifest 读取 Steam 版本");
+                return result.Fail("无法确定 Steam 版本，不能安全修补。");
             }
             if (!SteamDetector.IsSupportedSteamVersion(version.Value))
             {
                 var supported = string.Join(", ", SteamDetector.SupportedSteamVersions);
-                Log($"  Steam version: {version.Value} (UNSUPPORTED)");
-                Log($"  Supported versions: {supported}");
+                Log($"  Steam 版本：{version.Value}（不支持）");
+                Log($"  支持的版本：{supported}");
                 return result.Fail(
-                    $"Steam version mismatch: installed {version.Value}, " +
-                    $"supported {supported}. " +
-                    "Patching an unsupported version risks corrupting steamclient64.dll. " +
-                    "Update CloudRedirect or downgrade Steam.");
+                    $"Steam 版本不匹配：已安装 {version.Value}，" +
+                    $"支持 {supported}。" +
+                    "修补不受支持的版本可能损坏 steamclient64.dll。" +
+                    "请更新 CloudRedirect 或降级 Steam。");
             }
-            Log($"  Steam version: {version.Value} (OK)");
+            Log($"  Steam 版本：{version.Value}（正常）");
 
             try
             {
                 var hijackDll = FindCoreDll();
                 if (hijackDll == null)
-                    return result.Fail("SteamTools Core DLL not found. Is SteamTools installed?");
+                    return result.Fail("未找到 SteamTools 核心 DLL。是否已安装 SteamTools？");
 
                 var dllPath = Path.Combine(_steamPath, hijackDll);
                 byte[] dllData;
                 try { dllData = ReadFileShared(dllPath); }
-                catch (IOException) { return result.Fail($"{hijackDll} is in use - close Steam first"); }
+                catch (IOException) { return result.Fail($"{hijackDll} 正在使用中，请先关闭 Steam"); }
 
                 var resolvedCore = ResolveCorePatchOffsets(dllData);
                 if (resolvedCore == null)
-                    return result.Fail($"Could not identify patch locations in {hijackDll} - unsupported version?");
+                    return result.Fail($"无法识别 {hijackDll} 中的补丁位置——可能是不支持的版本");
 
                 var (patchedDll, dllApplied, dllSkipped, dllErrors) = ApplyPatches(dllData, resolvedCore);
                 if (dllErrors.Count > 0)
                 {
                     foreach (var err in dllErrors) Log(err);
-                    return result.Fail("Byte mismatch in " + hijackDll + " - wrong version?");
+                    return result.Fail(hijackDll + " 字节不匹配——可能版本不正确");
                 }
 
                 var cachePath = Fingerprint.FindCachePath(_steamPath, log: _log);
                 if (cachePath == null)
                 {
-                    Log("Payload cache not found. Deploying embedded payload..");
+                    Log("未找到 payload 缓存，正在部署内置 payload...");
                     cachePath = DeployEmbeddedPayload();
                     if (cachePath == null)
-                        return result.Fail("Could not deploy payload cache.");
+                        return result.Fail("无法部署 payload 缓存。");
                 }
 
-                Log("Patching payload (CloudRedirect namespace mode)..");
+                Log("正在修补 payload（CloudRedirect 命名空间模式）...");
                 // Backup both before either write (see ApplyOfflineSetup).
                 BackupBoth(cachePath, dllPath);
 
@@ -1228,32 +1228,32 @@ namespace CloudRedirect.Services.Patching
                     {
                         foreach (var err in p123Errors) Log(err);
                         // Non-fatal: SteamTools redirect and ours coexist (ours wins).
-                        Log("  Warning: could not apply some P1/P2/P3 patches (continuing -- non-fatal)");
+                        Log("  警告：部分 P1/P2/P3 补丁无法应用，将继续执行（非致命）");
                     }
                     if (p123Applied > 0)
-                        Log($"  Applied {p123Applied} cloud-disable patch(es) (P1/P2/P3)");
+                        Log($"  已应用 {p123Applied} 个云重定向禁用补丁（P1/P2/P3）");
                     else if (p123Skipped == resolvedPayload.Length)
-                        Log("  P1/P2/P3: already applied (SteamTools cloud redirect disabled)");
+                        Log("  P1/P2/P3：已应用（SteamTools 云重定向已禁用）");
                     afterP123 = patched;
                 }
                 else
                 {
-                    Log("  Could not resolve P1/P2/P3 offsets (continuing without them)");
+                    Log("  无法解析 P1/P2/P3 偏移，将跳过它们继续执行");
                 }
 
                 var resolved = ResolveCloudRedirectPatchOffsets(afterP123);
                 if (resolved == null)
-                    return result.Fail("Could not locate CloudRedirect patch sites in payload");
+                    return result.Fail("无法在 payload 中定位 CloudRedirect 补丁位置");
 
                 var (patchedPayload, plApplied, plSkipped, plErrors) = ApplyPatches(afterP123, resolved.Patches);
                 if (plErrors.Count > 0)
                 {
                     foreach (var err in plErrors) Log(err);
-                    return result.Fail("Byte mismatch at CloudRedirect patch sites");
+                    return result.Fail("CloudRedirect 补丁位置字节不匹配");
                 }
 
                 if (resolved.CodeCaveFileOffset + resolved.DynamicCodeCave.Length > patchedPayload.Length)
-                    return result.Fail("Payload too small for code cave injection");
+                    return result.Fail("payload 太小，无法注入 code cave");
 
                 bool caveAlready = BytesMatch(patchedPayload, resolved.CodeCaveFileOffset,
                     resolved.DynamicCodeCave, 0, resolved.DynamicCodeCave.Length);
@@ -1267,23 +1267,23 @@ namespace CloudRedirect.Services.Patching
                     resolved.CodeCaveFileOffset, resolved.DynamicCodeCave.Length);
                 ReEncryptAndWrite(cachePath, patchedPayload, iv);
                 int total = plApplied + (caveAlready ? 0 : 1);
-                Log($"  {total} cave change(s) applied" + (plSkipped > 0 ? $", {plSkipped} already done" : ""));
+                Log($"  已应用 {total} 个 code cave 变更" + (plSkipped > 0 ? $"，{plSkipped} 个已存在" : ""));
                 result.CachePatched = true;
 
                 if (dllApplied > 0)
                 {
                     FileUtils.AtomicWriteAllBytes(dllPath, patchedDll);
-                    Log($"  {dllApplied} core patch(es) applied to {hijackDll}");
+                    Log($"  已向 {hijackDll} 应用 {dllApplied} 个核心补丁");
                 }
                 result.DllPatched = true;
 
                 result.Succeeded = true;
-                Log("Done. P1/P2/P3 applied (SteamTools redirect disabled) + namespace DLL will be loaded.");
+                Log("完成。已应用 P1/P2/P3（SteamTools 重定向已禁用），命名空间 DLL 将被加载。");
             }
             catch (Exception ex)
             {
-                result.Fail($"Unexpected error: {ex.Message}");
-                Log($"Error: {ex.Message}");
+                result.Fail($"意外错误：{ex.Message}");
+                Log($"错误：{ex.Message}");
             }
 
             return result;
@@ -1298,27 +1298,27 @@ namespace CloudRedirect.Services.Patching
             {
                 var hijackDll = FindCoreDll();
                 if (hijackDll == null)
-                    return result.Fail("SteamTools Core DLL not found.");
+                    return result.Fail("未找到 SteamTools 核心 DLL。");
 
                 var dllPath = Path.Combine(_steamPath, hijackDll);
                 byte[] dllData;
                 try { dllData = ReadFileShared(dllPath); }
-                catch (IOException) { return result.Fail($"{hijackDll} is in use - close Steam first"); }
+                catch (IOException) { return result.Fail($"{hijackDll} 正在使用中，请先关闭 Steam"); }
 
                 var resolvedCore = ResolveCorePatchOffsets(dllData);
                 if (resolvedCore == null)
-                    return result.Fail($"Could not identify patch locations in {hijackDll}");
+                    return result.Fail($"无法识别 {hijackDll} 中的补丁位置");
 
                 var (revertedDll, dllReverted, dllSkipped, dllErrors) = UnapplyPatches(dllData, resolvedCore);
                 if (dllErrors.Count > 0)
                 {
                     foreach (var err in dllErrors) Log(err);
-                    return result.Fail("Byte mismatch in " + hijackDll);
+                    return result.Fail(hijackDll + " 字节不匹配");
                 }
 
                 var cachePath = Fingerprint.FindCachePath(_steamPath, verbose: false, log: _log);
                 if (cachePath == null)
-                    return result.Fail("Payload cache not found.");
+                    return result.Fail("未找到 payload 缓存。");
 
                 var (payload, iv, plErr) = ReadAndDecryptPayload(cachePath);
                 if (payload == null)
@@ -1333,12 +1333,12 @@ namespace CloudRedirect.Services.Patching
                     if (crErrors.Count > 0)
                     {
                         foreach (var err in crErrors) Log(err);
-                        return result.Fail("Byte mismatch at CloudRedirect patch sites");
+                        return result.Fail("CloudRedirect 补丁位置字节不匹配");
                     }
                     if (crReverted > 0)
-                        Log($"  Reverted {crReverted} CloudRedirect hook patch(es)");
+                        Log($"  已还原 {crReverted} 个 CloudRedirect hook 补丁");
                     else
-                        Log("  CloudRedirect hook: already original");
+                        Log("  CloudRedirect hook：已是原始状态");
                     afterCrRevert = reverted;
                 }
 
@@ -1351,37 +1351,37 @@ namespace CloudRedirect.Services.Patching
                     if (p123Errors.Count > 0)
                     {
                         foreach (var err in p123Errors) Log(err);
-                        Log("  Warning: could not revert some P1/P2/P3 patches");
+                        Log("  警告：部分 P1/P2/P3 补丁无法还原");
                     }
                     if (p123Reverted > 0)
-                        Log($"  Reverted {p123Reverted} P1/P2/P3 patch(es)");
+                        Log($"  已还原 {p123Reverted} 个 P1/P2/P3 补丁");
                     else if (p123Skipped == resolvedPayload.Length)
-                        Log("  P1/P2/P3: already original");
+                        Log("  P1/P2/P3：已是原始状态");
                     afterP123Revert = reverted;
                 }
 
                 // Backup both, then payload-first writes (matches apply order).
                 BackupBoth(cachePath, dllPath);
                 ReEncryptAndWrite(cachePath, afterP123Revert, iv);
-                Log("  Payload written.");
+                Log("  Payload 已写入。");
 
                 if (dllReverted > 0)
                 {
                     FileUtils.AtomicWriteAllBytes(dllPath, revertedDll);
-                    Log($"  {dllReverted} core patch(es) reverted in {hijackDll}");
+                    Log($"  已在 {hijackDll} 中还原 {dllReverted} 个核心补丁");
                 }
                 else
                 {
-                    Log($"  {hijackDll}: already original");
+                    Log($"  {hijackDll}：已是原始状态");
                 }
 
                 result.Succeeded = true;
-                Log("Cloud redirect patch reverted.");
+                Log("Cloud Redirect 补丁已还原。");
             }
             catch (Exception ex)
             {
-                result.Fail($"Unexpected error: {ex.Message}");
-                Log($"Error: {ex.Message}");
+                result.Fail($"意外错误：{ex.Message}");
+                Log($"错误：{ex.Message}");
             }
 
             return result;

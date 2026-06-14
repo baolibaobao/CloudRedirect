@@ -32,6 +32,7 @@ public partial class SettingsPage : Page
     [
         ("Settings_SystemDefault", "system"),
         ("Settings_LanguageEnglish", "en"),
+        ("Settings_LanguageChineseSimplified", "zh-CN"),
         ("Settings_LanguageSpanish", "es"),
         ("Settings_LanguagePortuguese", "pt-BR"),
     ];

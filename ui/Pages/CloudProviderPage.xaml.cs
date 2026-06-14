@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -52,6 +53,10 @@ public partial class CloudProviderPage : Page
         string PathTextOverride,
         Services.TokenStatus? TokenStatus);
 
+    private sealed record WebDavSettings(string ServerUrl, string Username, string Password, string RemoteRootPath);
+    private sealed record QuarkSettings(string Cookie, string OpenListExe, string DataDir, string AdminPassword,
+        string BaseUrl, string MountPath, string RemoteRootPath, bool ForceStorageUpdate);
+
     // M14: Move SteamDetector.ReadConfig + FindSteamPath + OAuth token
     // status check off the UI thread. Loaded used to call them
     // synchronously; on a slow disk or stalled DPAPI prompt that froze
@@ -86,7 +91,7 @@ public partial class CloudProviderPage : Page
                 }
 
                 Services.TokenStatus? tokenStatus = null;
-                if (config?.TokenPath != null)
+                if (config?.TokenPath != null && config.Provider is "gdrive" or "onedrive")
                     tokenStatus = Services.OAuthService.CheckTokenStatus(config.TokenPath);
 
                 return new LoadedConfigSnapshot(config, defaultLocal, pathOverride, tokenStatus);
@@ -109,20 +114,13 @@ public partial class CloudProviderPage : Page
         if (snap.Config == null)
         {
             AuthStatus.Text = S.Get("CloudProvider_NoConfigFound");
-            ProviderCombo.SelectedIndex = 3; // Local only
+            SelectProviderByTag("local");
             if (!string.IsNullOrEmpty(snap.DefaultLocalPath))
                 TokenPathBox.Text = snap.DefaultLocalPath;
             return;
         }
 
-        for (int i = 0; i < ProviderCombo.Items.Count; i++)
-        {
-            if (ProviderCombo.Items[i] is ComboBoxItem item && item.Tag as string == snap.Config.Provider)
-            {
-                ProviderCombo.SelectedIndex = i;
-                break;
-            }
-        }
+        SelectProviderByTag(snap.Config.Provider);
 
         if (!string.IsNullOrEmpty(snap.PathTextOverride))
             TokenPathBox.Text = snap.PathTextOverride;
@@ -133,10 +131,26 @@ public partial class CloudProviderPage : Page
         }
 
         UpdateProviderUI();
+        if (snap.Config.Provider == "webdav")
+            LoadWebDavSettings(TokenPathBox.Text);
+        else if (snap.Config.Provider == "quark")
+            LoadQuarkSettings(TokenPathBox.Text);
         // Use the pre-resolved token status so the dispatcher path never
         // re-enters CheckTokenStatus synchronously on Loaded. Only reach
         // the slow path on later user gestures (Provider change, Browse).
         UpdateAuthStatus(snap.TokenStatus);
+    }
+
+    private void SelectProviderByTag(string provider)
+    {
+        for (int i = 0; i < ProviderCombo.Items.Count; i++)
+        {
+            if (ProviderCombo.Items[i] is ComboBoxItem item && item.Tag as string == provider)
+            {
+                ProviderCombo.SelectedIndex = i;
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -150,6 +164,18 @@ public partial class CloudProviderPage : Page
         if (steamPath != null)
             TokenPathBox.Text = Path.Combine(steamPath, "localcloud");
     }
+
+    private static string DefaultWebDavConfigPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "CloudRedirect", "webdav.json");
+
+    private static string DefaultQuarkConfigPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "CloudRedirect", "quark_openlist.json");
+
+    private static string DefaultQuarkDataDir() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "CloudRedirect", "openlist-data");
 
     private void ProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -172,6 +198,16 @@ public partial class CloudProviderPage : Page
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "CloudRedirect", "onedrive_tokens.json");
             }
+            else if (tag == "webdav")
+            {
+                TokenPathBox.Text = DefaultWebDavConfigPath();
+                LoadWebDavSettings(TokenPathBox.Text);
+            }
+            else if (tag == "quark")
+            {
+                TokenPathBox.Text = DefaultQuarkConfigPath();
+                LoadQuarkSettings(TokenPathBox.Text);
+            }
             else if (tag is "local" or "folder")
             {
                 SetDefaultLocalPath();
@@ -190,13 +226,18 @@ public partial class CloudProviderPage : Page
 
         var tag = item.Tag as string;
         bool needsTokens = tag is "gdrive" or "onedrive";
+        bool isWebDav = tag == "webdav";
+        bool isQuark = tag == "quark";
         bool isFolder = tag == "folder";
         bool isLocal = tag == "local";
-        bool needsPath = needsTokens || isFolder;
+        bool needsPath = needsTokens || isWebDav || isQuark || isFolder;
 
         TokenPathBox.IsEnabled = needsPath;
         BrowseButton.IsEnabled = needsPath;
         SignInButton.Visibility = needsTokens ? Visibility.Visible : Visibility.Collapsed;
+        TestConnectionButton.Visibility = (needsTokens || isWebDav || isQuark) ? Visibility.Visible : Visibility.Collapsed;
+        WebDavSettingsPanel.Visibility = isWebDav ? Visibility.Visible : Visibility.Collapsed;
+        QuarkSettingsPanel.Visibility = isQuark ? Visibility.Visible : Visibility.Collapsed;
 
         // Update labels based on provider type
         if (isFolder)
@@ -218,6 +259,18 @@ public partial class CloudProviderPage : Page
             PathLabel.Text = S.Get("CloudProvider_TokenFilePath");
             TokenPathBox.PlaceholderText = S.Get("CloudProvider_TokenPlaceholder");
             PathHint.Text = "";
+        }
+        else if (isWebDav)
+        {
+            PathLabel.Text = S.Get("CloudProvider_WebDAVConfigPath");
+            TokenPathBox.PlaceholderText = S.Get("CloudProvider_WebDAVConfigPlaceholder");
+            PathHint.Text = S.Get("CloudProvider_WebDAVConfigHint");
+        }
+        else if (isQuark)
+        {
+            PathLabel.Text = S.Get("CloudProvider_QuarkConfigPath");
+            TokenPathBox.PlaceholderText = S.Get("CloudProvider_QuarkConfigPlaceholder");
+            PathHint.Text = S.Get("CloudProvider_QuarkConfigHint");
         }
         else
         {
@@ -308,11 +361,11 @@ public partial class CloudProviderPage : Page
         }
         catch (OperationCanceledException)
         {
-            AppendLog("Authentication cancelled.");
+            AppendLog("认证已取消。");
         }
         catch (Exception ex)
         {
-            AppendLog($"ERROR: {ex.Message}");
+            AppendLog($"错误：{ex.Message}");
         }
         finally
         {
@@ -345,6 +398,214 @@ public partial class CloudProviderPage : Page
         }
     }
 
+    private async void TestConnection_Click(object sender, RoutedEventArgs e)
+    {
+        var provider = GetSelectedProvider();
+        if (provider is "local" or "folder") return;
+
+        if (!await SaveConfigSilent())
+            return;
+
+        LogBorder.Visibility = Visibility.Visible;
+        _logBuffer.Clear();
+        LogOutput.Text = "";
+        AppendLog(S.Format("CloudProvider_TestingProvider", provider));
+        AuthStatus.Text = S.Get("CloudProvider_TestingConnection");
+        AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldKeyhole24;
+
+        TestConnectionButton.IsEnabled = false;
+        SignInButton.IsEnabled = false;
+        try
+        {
+            var result = await RunProviderAuthStatusAsync(provider);
+            AppendLog(result.CommandLine);
+            if (!string.IsNullOrWhiteSpace(result.StdErr))
+                AppendLog(result.StdErr.Trim());
+            AppendLog(result.StdOut.Trim());
+
+            bool authenticated = false;
+            string? error = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(result.StdOut);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("authenticated", out var authProp) && authProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    authenticated = authProp.GetBoolean();
+                if (root.TryGetProperty("error", out var errorProp))
+                    error = errorProp.GetString();
+            }
+            catch (JsonException ex)
+            {
+                error = S.Format("CloudProvider_InvalidCliResponse", ex.Message);
+            }
+
+            if (result.ExitCode == 0 && authenticated)
+            {
+                AuthStatus.Text = S.Get("CloudProvider_TestConnectionSuccess");
+                AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldCheckmark24;
+            }
+            else
+            {
+                AuthStatus.Text = !string.IsNullOrWhiteSpace(error)
+                    ? S.Format("CloudProvider_TestConnectionFailedWithError", error)
+                    : S.Format("CloudProvider_TestConnectionFailedWithError", result.ExitCode.ToString());
+                AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldDismiss24;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog(ex.ToString());
+            AuthStatus.Text = S.Format("CloudProvider_TestConnectionFailedWithError", ex.Message);
+            AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldDismiss24;
+        }
+        finally
+        {
+            TestConnectionButton.IsEnabled = true;
+            SignInButton.IsEnabled = true;
+        }
+    }
+
+    private sealed record CliResult(int ExitCode, string StdOut, string StdErr, string CommandLine);
+
+    private static async Task<CliResult> RunProviderAuthStatusAsync(string provider)
+    {
+        string? cliPath = Services.EmbeddedCli.EnsureExtracted();
+        if (string.IsNullOrEmpty(cliPath) || !File.Exists(cliPath))
+            throw new FileNotFoundException(S.Get("CloudProvider_CliUnavailable"));
+
+        string arguments = $"auth-status {provider}";
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = cliPath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            }
+        };
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return new CliResult(process.ExitCode, await stdout, await stderr, $"{cliPath} {arguments}");
+    }
+
+    private static string ReadString(JsonElement root, string name, string fallback = "")
+    {
+        return root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String
+            ? prop.GetString() ?? fallback
+            : fallback;
+    }
+
+    private void LoadWebDavSettings(string path)
+    {
+        WebDavServerUrlBox.Text = "";
+        WebDavUsernameBox.Text = "";
+        WebDavPasswordBox.Password = "";
+        WebDavRemoteRootBox.Text = "/CloudRedirect";
+        try
+        {
+            if (!File.Exists(path)) return;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+            WebDavServerUrlBox.Text = ReadString(root, "server_url");
+            WebDavUsernameBox.Text = ReadString(root, "username");
+            WebDavPasswordBox.Password = ReadString(root, "password");
+            WebDavRemoteRootBox.Text = ReadString(root, "remote_root_path", "/CloudRedirect");
+        }
+        catch { }
+    }
+
+    private void LoadQuarkSettings(string path)
+    {
+        QuarkCookieBox.Text = "";
+        QuarkOpenListPathBox.Text = Services.EmbeddedOpenList.DefaultExtractedPath;
+        QuarkDataDirBox.Text = DefaultQuarkDataDir();
+        QuarkRemoteRootBox.Text = "/Quark/CloudRedirect";
+        QuarkForceStorageUpdateBox.IsChecked = false;
+        try
+        {
+            if (!File.Exists(path)) return;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+            QuarkCookieBox.Text = ReadString(root, "cookie");
+            QuarkOpenListPathBox.Text = ReadString(root, "openlist_exe", Services.EmbeddedOpenList.DefaultExtractedPath);
+            QuarkDataDirBox.Text = ReadString(root, "data_dir", DefaultQuarkDataDir());
+            QuarkRemoteRootBox.Text = ReadString(root, "remote_root_path", "/Quark/CloudRedirect");
+            if (root.TryGetProperty("force_storage_update", out var force) && force.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                QuarkForceStorageUpdateBox.IsChecked = force.GetBoolean();
+        }
+        catch { }
+    }
+
+    private static string ExistingString(string path, string name, string fallback = "")
+    {
+        try
+        {
+            if (!File.Exists(path)) return fallback;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return ReadString(doc.RootElement, name, fallback);
+        }
+        catch { return fallback; }
+    }
+
+    private static void WriteJsonFile(string path, Action<Utf8JsonWriter> write)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+            write(writer);
+            writer.WriteEndObject();
+        }
+        Services.FileUtils.AtomicWriteAllText(path, Encoding.UTF8.GetString(ms.ToArray()));
+    }
+
+    private void SaveWebDavSettings(string path)
+    {
+        var existingPassword = ExistingString(path, "password");
+        var password = WebDavPasswordBox.Password ?? "";
+        if (string.IsNullOrEmpty(password))
+            password = existingPassword;
+
+        WriteJsonFile(path, writer =>
+        {
+            writer.WriteString("server_url", WebDavServerUrlBox.Text?.Trim() ?? "");
+            writer.WriteString("username", WebDavUsernameBox.Text?.Trim() ?? "");
+            writer.WriteString("password", password);
+            writer.WriteString("remote_root_path", string.IsNullOrWhiteSpace(WebDavRemoteRootBox.Text) ? "/CloudRedirect" : WebDavRemoteRootBox.Text.Trim());
+        });
+    }
+
+    private void SaveQuarkSettings(string path)
+    {
+        var openListPath = Services.EmbeddedOpenList.EnsureExtracted() ?? QuarkOpenListPathBox.Text?.Trim() ?? Services.EmbeddedOpenList.DefaultExtractedPath;
+        if (string.IsNullOrWhiteSpace(QuarkOpenListPathBox.Text) || !File.Exists(QuarkOpenListPathBox.Text.Trim()))
+            QuarkOpenListPathBox.Text = openListPath;
+
+        var existingPassword = ExistingString(path, "admin_password");
+        var existingCookie = ExistingString(path, "cookie");
+        var cookie = QuarkCookieBox.Text ?? "";
+        if (string.IsNullOrEmpty(cookie))
+            cookie = existingCookie;
+
+        WriteJsonFile(path, writer =>
+        {
+            writer.WriteString("cookie", cookie);
+            writer.WriteString("openlist_exe", QuarkOpenListPathBox.Text?.Trim() ?? openListPath);
+            writer.WriteString("data_dir", string.IsNullOrWhiteSpace(QuarkDataDirBox.Text) ? DefaultQuarkDataDir() : QuarkDataDirBox.Text.Trim());
+            writer.WriteString("admin_password", existingPassword);
+            writer.WriteString("base_url", "http://127.0.0.1:5244");
+            writer.WriteString("mount_path", "/Quark");
+            writer.WriteString("remote_root_path", string.IsNullOrWhiteSpace(QuarkRemoteRootBox.Text) ? "/Quark/CloudRedirect" : QuarkRemoteRootBox.Text.Trim());
+            writer.WriteBoolean("force_storage_update", QuarkForceStorageUpdateBox.IsChecked == true);
+        });
+    }
+
     /// <summary>
     /// Writes config.json without showing a dialog. Returns true on success.
     /// </summary>
@@ -367,6 +628,11 @@ public partial class CloudProviderPage : Page
 
         try
         {
+            if (provider == "webdav")
+                SaveWebDavSettings(tokenPath);
+            else if (provider == "quark")
+                SaveQuarkSettings(tokenPath);
+
             Services.ConfigHelper.SaveConfig(configPath,
                 new[] { "provider", "sync_path", "token_path" },
                 writer =>
@@ -432,6 +698,27 @@ public partial class CloudProviderPage : Page
         }
 
         var tokenPath = TokenPathBox.Text?.Trim();
+        if (tag == "webdav" || tag == "quark")
+        {
+            bool isQuarkConfig = tag == "quark";
+            if (string.IsNullOrEmpty(tokenPath))
+            {
+                AuthStatus.Text = S.Get(isQuarkConfig ? "CloudProvider_NoQuarkConfigPath" : "CloudProvider_NoWebDAVConfigPath");
+                AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldKeyhole24;
+            }
+            else if (File.Exists(tokenPath))
+            {
+                AuthStatus.Text = S.Format(isQuarkConfig ? "CloudProvider_QuarkConfigFound" : "CloudProvider_WebDAVConfigFound", tokenPath);
+                AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldCheckmark24;
+            }
+            else
+            {
+                AuthStatus.Text = S.Format(isQuarkConfig ? "CloudProvider_QuarkConfigMissing" : "CloudProvider_WebDAVConfigMissing", tokenPath);
+                AuthIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ShieldDismiss24;
+            }
+            return;
+        }
+
         if (string.IsNullOrEmpty(tokenPath))
         {
             AuthStatus.Text = S.Get("CloudProvider_NoTokenFilePath");

@@ -35,9 +35,10 @@
        checkout. -->
   <Target Name="CopyNativeDll" BeforeTargets="BeforeBuild">
     <PropertyGroup>
-      <NativeDllSource>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\build\Release\cloud_redirect.dll'))</NativeDllSource>
+      <NativeBuildDir Condition="'$(NativeBuildDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\build\Release'))</NativeBuildDir>
+      <NativeDllSource>$([System.IO.Path]::GetFullPath('$(NativeBuildDir)\cloud_redirect.dll'))</NativeDllSource>
       <NativeDllDest>$(MSBuildProjectDirectory)\Resources\cloud_redirect.dll</NativeDllDest>
-      <NativeCliSource>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\build\Release\cloud_redirect_cli.exe'))</NativeCliSource>
+      <NativeCliSource>$([System.IO.Path]::GetFullPath('$(NativeBuildDir)\cloud_redirect_cli.exe'))</NativeCliSource>
       <NativeCliDest>$(MSBuildProjectDirectory)\Resources\cloud_redirect_cli.exe</NativeCliDest>
     </PropertyGroup>
     <MakeDir Directories="$(MSBuildProjectDirectory)\Resources" Condition="!Exists('$(MSBuildProjectDirectory)\Resources')" />

@@ -61,7 +61,7 @@ public partial class DashboardPage : Page
                 }
 
                 // M9: Check OAuth token status off the UI thread (DPAPI + file I/O)
-                if (config?.TokenPath != null)
+                if (config?.TokenPath != null && config.Provider is "gdrive" or "onedrive")
                     tokenStatus = Services.OAuthService.CheckTokenStatus(config.TokenPath);
             }
 
@@ -127,6 +127,27 @@ public partial class DashboardPage : Page
             {
                 ProviderStatus.Text = S.Format("Dashboard_NoSyncFolder", config.DisplayName);
                 ProviderIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.CloudOff24;
+            }
+            return;
+        }
+
+        if (config.Provider is "webdav" or "quark")
+        {
+            bool isQuark = config.Provider == "quark";
+            if (string.IsNullOrEmpty(config.TokenPath))
+            {
+                ProviderStatus.Text = S.Get(isQuark ? "CloudProvider_NoQuarkConfigPath" : "CloudProvider_NoWebDAVConfigPath");
+                ProviderIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.CloudOff24;
+            }
+            else if (File.Exists(config.TokenPath))
+            {
+                ProviderStatus.Text = S.Format(isQuark ? "CloudProvider_QuarkConfigFound" : "CloudProvider_WebDAVConfigFound", config.TokenPath);
+                ProviderIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.CloudCheckmark24;
+            }
+            else
+            {
+                ProviderStatus.Text = S.Format(isQuark ? "CloudProvider_QuarkConfigMissing" : "CloudProvider_WebDAVConfigMissing", config.TokenPath);
+                ProviderIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.CloudDismiss24;
             }
             return;
         }

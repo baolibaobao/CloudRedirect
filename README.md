@@ -39,6 +39,8 @@ Same rough idea on Linux, but involving a flatpak application and a library that
 
 - **Google Drive**
 - **OneDrive**
+- **WebDAV**
+- **Quark Netdisk (built-in OpenList gateway)**
 - **Local folder / mapped drive** -- by request of literally one user.
 
 With more to come over time. 
@@ -50,6 +52,17 @@ Grab the latest release from the [Releases page](https://github.com/Selectively1
 Run the EXE. Pick your mode - STfixer mode for fixes to ST bugs, CloudRedirect mode for the good stuff. In Setup, hit 'Run All Patches'. Go to the Cloud Provider tab, select your provider. If it is a cloud provider, sign in to it.
 
 That's it. Go launch Steam and watch the magic.
+
+## Windows 中文快速使用（夸克 OpenList）
+
+1. 运行 `ui/bin/publish/CloudRedirect.exe`。
+2. 在“安装设置”页执行补丁与 DLL 部署；部署后需要完全退出并重启 Steam。
+3. 在“云提供商”页选择“夸克网盘（OpenList）”，粘贴夸克 Cookie，远端根目录默认使用 `/Quark/CloudRedirect`。
+4. 点击“测试连接”。成功后会在夸克网盘创建 `CloudRedirect/.healthcheck` 测试目录，测试文件会自动删除。
+5. 重启 Steam 后，Steam 会加载 `cloud_redirect.dll`。日常同步由 DLL 完成，`CloudRedirect.exe` 只是配置/部署控制面板，不需要常驻。
+6. 夸克远端目录按 `CloudRedirect/<Steam accountId>/<Steam appId>/...` 分层，例如 `CloudRedirect/313841711/4337210/blobs/...`。
+
+如果 Steam 显示云同步成功但夸克没有文件，请检查 Steam 目录下的 `cloud_redirect.log`，确认有 `Cloud provider 'Quark OpenList' initialized`，且没有 `cloud provider unavailable` 或 `init failed`。
 
 ## Usage (Linux)
 
@@ -86,6 +99,21 @@ cmake --build build --config Release
 This builds both the C++ DLL (`build/Release/cloud_redirect.dll`) and publishes the WPF app (`ui/bin/publish/CloudRedirect.exe`). The DLL is automatically embedded into the executable.
 
 Or don't build it? Building Windows apps is pain.
+
+### Build with Visual Studio 2026
+
+```powershell
+& "F:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -B build-vs2026 -G "Visual Studio 18 2026" -A x64
+& "F:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build-vs2026 --config Release
+```
+
+The VS2026 build does not require installing the v143 toolset when using the `Visual Studio 18 2026` generator. The published UI is written to `ui/bin/publish/CloudRedirect.exe`, and the native DLL/CLI are copied from the active CMake build directory into the UI resources during publish.
+
+### Package the Windows build
+
+```powershell
+Compress-Archive -Path ui\bin\publish\* -DestinationPath out\CloudRedirect-zh-v2.1.8-win-x64.zip -Force
+```
 
 ## Building from source (Linux)
 

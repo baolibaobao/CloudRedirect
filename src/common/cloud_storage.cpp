@@ -4,6 +4,8 @@
 #include "local_disk_provider.h"
 #include "google_drive_provider.h"
 #include "onedrive_provider.h"
+#include "webdav_provider.h"
+#include "quark_openlist_provider.h"
 #include "cloud_metadata_paths.h"
 #include "cloud_staging.h"
 #include "file_util.h"
@@ -2826,6 +2828,12 @@ std::unique_ptr<ICloudProvider> CreateCloudProvider(const std::string& name) {
     }
     if (lower == "onedrive") {
         return wireAuthCallback(std::make_unique<OneDriveProvider>());
+    }
+    if (lower == "webdav") {
+        return std::make_unique<WebDavProvider>();
+    }
+    if (lower == "quark") {
+        return std::make_unique<QuarkOpenListProvider>();
     }
     LOG("[CloudStorage] CreateCloudProvider: unknown provider '%s'", name.c_str());
     return nullptr;

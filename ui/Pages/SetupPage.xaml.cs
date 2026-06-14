@@ -143,7 +143,7 @@ public partial class SetupPage : Page
 
         if (!running) return;
 
-        Log("Steam is running -- shutting it down...");
+        Log("检测到 Steam 正在运行，正在关闭...");
 
         await Task.Run(() =>
         {
@@ -174,7 +174,7 @@ public partial class SetupPage : Page
             }
         });
 
-        Log("Steam closed.");
+        Log("Steam 已关闭。");
     }
 
     /// <summary>Starts Steam, waits up to 90s for the payload cache, then closes it.</summary>
@@ -183,11 +183,11 @@ public partial class SetupPage : Page
         var steamExe = Path.Combine(_steamPath ?? "", "steam.exe");
         if (!File.Exists(steamExe))
         {
-            Log("steam.exe not found");
+            Log("未找到 steam.exe");
             return false;
         }
 
-        Log("Starting Steam to download payload cache...");
+        Log("正在启动 Steam 以下载 payload 缓存...");
 
         await Task.Run(() =>
         {
@@ -198,7 +198,7 @@ public partial class SetupPage : Page
             })?.Dispose();
         });
 
-        Log("Waiting for payload to appear (up to 30 seconds)...");
+        Log("正在等待 payload 缓存出现（最多 30 秒）...");
 
         bool found = await Task.Run(() =>
         {
@@ -212,9 +212,9 @@ public partial class SetupPage : Page
         });
 
         if (found)
-            Log("Payload cache found.");
+            Log("已找到 payload 缓存。");
         else
-            Log("Timed out waiting for payload cache.");
+            Log("等待 payload 缓存超时。");
 
         await EnsureSteamClosed();
         return found;
@@ -561,12 +561,12 @@ public partial class SetupPage : Page
                     writer.WriteString("sync_path", localCloudPath);
                 }));
 
-            Log($"Default config written -- saves will sync to: {localCloudPath}");
-            Log("You can change this later on the Cloud Provider page.");
+            Log($"已写入默认配置，存档将同步到：{localCloudPath}");
+            Log("之后可在“云提供商”页面修改。");
         }
         catch (Exception ex)
         {
-            Log($"WARNING: Failed to write default config: {ex.Message}");
+            Log($"警告：写入默认配置失败：{ex.Message}");
         }
     }
 
@@ -590,7 +590,7 @@ public partial class SetupPage : Page
         bool needsCoreDlls = await Task.Run(() => !new Patcher(_steamPath, Log).HasCoreDll());
         if (needsCoreDlls)
         {
-            Log("═══ Pre-step: Download SteamTools Core DLLs ═══");
+            Log("═══ 预处理：下载 SteamTools 核心 DLL ═══");
             try
             {
                 var patcher = new Patcher(_steamPath, Log);
@@ -598,19 +598,19 @@ public partial class SetupPage : Page
 
                 if (repairResult?.Succeeded != true)
                 {
-                    Log($"FAILED: {repairResult?.Error ?? "Unknown error"}");
+                    Log($"失败：{repairResult?.Error ?? "未知错误"}");
                     Log("");
-                    Log("Cannot proceed without core DLLs.");
+                    Log("缺少核心 DLL，无法继续。");
                     SetBusy(false);
                     return;
                 }
-                Log("OK");
+                Log("完成");
             }
             catch (Exception ex)
             {
-                Log($"FAILED: {ex.Message}");
+                Log($"失败：{ex.Message}");
                 Log("");
-                Log("Cannot proceed without core DLLs.");
+                Log("缺少核心 DLL，无法继续。");
                 SetBusy(false);
                 return;
             }
@@ -620,20 +620,20 @@ public partial class SetupPage : Page
         bool needsPayload = await Task.Run(() => !new Patcher(_steamPath, Log).HasPayloadCache());
         if (needsPayload)
         {
-            Log("═══ Pre-step: Bootstrap Steam for Payload ═══");
+            Log("═══ 预处理：启动 Steam 获取 Payload ═══");
             bool payloadFound = await BootstrapSteamForPayload();
             if (!payloadFound)
             {
-                Log("Steam download timed out, will try embedded payload.");
+                Log("Steam 下载超时，将尝试使用内置 payload。");
             }
             else
             {
-                Log("OK");
+                Log("完成");
             }
             Log("");
         }
 
-        Log("═══ Step 1/4: SteamTools Offline Setup ═══");
+        Log("═══ 步骤 1/4：SteamTools 离线设置 ═══");
         try
         {
             PatchResult? result = null;
@@ -646,24 +646,24 @@ public partial class SetupPage : Page
             if (result?.Succeeded == true)
             {
                 OfflineStatusText.Text = S.Get("Setup_OfflinePatched");
-                Log("OK");
+                Log("完成");
             }
             else
             {
                 OfflineStatusText.Text = S.Get("Setup_FailedSeeLog");
-                Log($"FAILED: {result?.Error ?? "Unknown error"}");
+                Log($"失败：{result?.Error ?? "未知错误"}");
                 allSucceeded = false;
             }
         }
         catch (Exception ex)
         {
-            Log($"FAILED: {ex.Message}");
+            Log($"失败：{ex.Message}");
             allSucceeded = false;
         }
 
         Log("");
 
-        Log("═══ Step 2/4: Patch SteamTools.exe ═══");
+        Log("═══ 步骤 2/4：修补 SteamTools.exe ═══");
         try
         {
             int stResult = 0;
@@ -675,24 +675,24 @@ public partial class SetupPage : Page
 
             await RefreshStExeStatusAsync();
             if (stResult == 0)
-                Log("Skipped (not installed)");
+                Log("已跳过（未安装）");
             else if (stResult == 1)
-                Log("OK");
+                Log("完成");
             else
             {
-                Log("FAILED -- see detail above");
+                Log("失败——请查看上方详情");
                 allSucceeded = false;
             }
         }
         catch (Exception ex)
         {
-            Log($"FAILED: {ex.Message}");
+            Log($"失败：{ex.Message}");
             allSucceeded = false;
         }
 
         Log("");
 
-        Log("═══ Step 3/4: Cloud Redirect Patch ═══");
+        Log("═══ 步骤 3/4：Cloud Redirect 补丁 ═══");
         try
         {
             PatchResult? patchResult = null;
@@ -705,25 +705,25 @@ public partial class SetupPage : Page
             if (patchResult?.Succeeded == true)
             {
                 PatchStatusText.Text = S.Get("Setup_PatchAppliedSuccessfully");
-                Log("OK");
+                Log("完成");
             }
             else
             {
                 PatchStatusText.Text = S.Get("Setup_PatchFailedSeeLog");
-                Log($"FAILED: {patchResult?.Error ?? "Unknown error"}");
+                Log($"失败：{patchResult?.Error ?? "未知错误"}");
                 allSucceeded = false;
             }
         }
         catch (Exception ex)
         {
-            Log($"FAILED: {ex.Message}");
+            Log($"失败：{ex.Message}");
             PatchStatusText.Text = S.Get("Setup_PatchFailedSeeLog");
             allSucceeded = false;
         }
 
         Log("");
 
-        Log("═══ Step 4/4: Deploy cloud_redirect.dll ═══");
+        Log("═══ 步骤 4/4：部署 cloud_redirect.dll ═══");
         try
         {
             var destPath = Path.Combine(_steamPath, "cloud_redirect.dll");
@@ -731,7 +731,7 @@ public partial class SetupPage : Page
 
             if (deployError != null)
             {
-                Log($"FAILED: {deployError}");
+                Log($"失败：{deployError}");
                 DeployStatusText.Text = S.Get("Setup_DeployFailed");
                 allSucceeded = false;
             }
@@ -739,13 +739,13 @@ public partial class SetupPage : Page
             {
                 var info = new FileInfo(destPath);
                 DeployStatusText.Text = S.Format("Setup_DllInstalled", info.Length.ToString("N0"), info.LastWriteTime.ToString("g"));
-                Log($"Deployed to {destPath}");
-                Log("OK");
+                Log($"已部署到 {destPath}");
+                Log("完成");
             }
         }
         catch (Exception ex)
         {
-            Log($"FAILED: {ex.Message}");
+            Log($"失败：{ex.Message}");
             DeployStatusText.Text = S.Get("Setup_DeployFailed");
             allSucceeded = false;
         }
@@ -758,11 +758,11 @@ public partial class SetupPage : Page
 
         if (!allSucceeded)
         {
-            Log("Some steps failed -- review the log above.");
+            Log("部分步骤失败，请查看上方日志。");
         }
         else
         {
-            Log("All patches applied successfully.");
+            Log("所有补丁已成功应用。");
         }
 
         var mode = SteamDetector.ReadModeSetting();
@@ -861,7 +861,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Applying SteamTools offline setup patch...");
+        Log("正在应用 SteamTools 离线设置补丁...");
 
         try
         {
@@ -876,18 +876,18 @@ public partial class SetupPage : Page
             {
                 OfflineStatusText.Text = S.Get("Setup_OfflinePatched");
                 Log("");
-                Log("Offline setup complete.");
+                Log("离线设置补丁已完成。");
             }
             else
             {
                 OfflineStatusText.Text = S.Get("Setup_FailedSeeLog");
                 Log("");
-                Log($"ERROR: {result?.Error ?? "Unknown error"}");
+                Log($"错误：{result?.Error ?? "未知错误"}");
             }
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             OfflineStatusText.Text = S.Get("Setup_FailedSeeLog");
         }
         finally
@@ -910,7 +910,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Reverting SteamTools offline setup patch...");
+        Log("正在还原 SteamTools 离线设置补丁...");
 
         try
         {
@@ -926,18 +926,18 @@ public partial class SetupPage : Page
             if (result?.Succeeded == true)
             {
                 Log("");
-                Log("Offline setup reverted.");
+                Log("离线设置补丁已还原。");
             }
             else
             {
                 OfflineStatusText.Text = S.Get("Setup_FailedSeeLog");
                 Log("");
-                Log($"ERROR: {result?.Error ?? "Unknown error"}");
+                Log($"错误：{result?.Error ?? "未知错误"}");
             }
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             OfflineStatusText.Text = S.Get("Setup_FailedSeeLog");
         }
         finally
@@ -960,7 +960,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Patching SteamTools.exe to disable DLL deployment...");
+        Log("正在修补 SteamTools.exe 以禁用其 DLL 部署...");
 
         try
         {
@@ -973,13 +973,13 @@ public partial class SetupPage : Page
 
             await RefreshStExeStatusAsync();
             Log("");
-            Log(stResult == 1 ? "SteamTools.exe patched."
-              : stResult == 0 ? "SteamTools.exe not found -- nothing to patch."
-              : "Patch failed -- see log above.");
+            Log(stResult == 1 ? "SteamTools.exe 已修补。"
+              : stResult == 0 ? "未找到 SteamTools.exe，无需修补。"
+              : "修补失败，请查看上方日志。");
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             StExeStatusText.Text = S.Get("Setup_FailedSeeLog");
         }
         finally
@@ -1002,7 +1002,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Restoring SteamTools.exe to original...");
+        Log("正在将 SteamTools.exe 还原为原始状态...");
 
         try
         {
@@ -1015,11 +1015,11 @@ public partial class SetupPage : Page
 
             await RefreshStExeStatusAsync();
             Log("");
-            Log(success ? "SteamTools.exe restored." : "Restore failed -- see log above.");
+            Log(success ? "SteamTools.exe 已还原。" : "还原失败，请查看上方日志。");
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             StExeStatusText.Text = S.Get("Setup_FailedSeeLog");
         }
         finally
@@ -1042,7 +1042,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Applying cloud redirect patch...");
+        Log("正在应用 Cloud Redirect 补丁...");
 
         try
         {
@@ -1057,17 +1057,17 @@ public partial class SetupPage : Page
             {
                 PatchStatusText.Text = S.Get("Setup_PatchAppliedSuccessfully");
                 Log("");
-                Log("Patch complete. Remember to deploy cloud_redirect.dll next.");
+                Log("补丁已完成。下一步请部署 cloud_redirect.dll。");
             }
             else
             {
                 PatchStatusText.Text = S.Get("Setup_PatchFailedSeeLog");
-                Log($"FAILED: {patchResult?.Error ?? "Unknown error"}");
+                Log($"失败：{patchResult?.Error ?? "未知错误"}");
             }
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             PatchStatusText.Text = S.Get("Setup_PatchFailedSeeLog");
         }
         finally
@@ -1090,7 +1090,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Reverting cloud redirect patch...");
+        Log("正在还原 Cloud Redirect 补丁...");
 
         try
         {
@@ -1106,18 +1106,18 @@ public partial class SetupPage : Page
             if (result?.Succeeded == true)
             {
                 Log("");
-                Log("Cloud redirect patch reverted.");
+                Log("Cloud Redirect 补丁已还原。");
             }
             else
             {
                 PatchStatusText.Text = S.Get("Setup_FailedSeeLog");
                 Log("");
-                Log($"ERROR: {result?.Error ?? "Unknown error"}");
+                Log($"错误：{result?.Error ?? "未知错误"}");
             }
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             PatchStatusText.Text = S.Get("Setup_FailedSeeLog");
         }
         finally
@@ -1147,7 +1147,7 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Source: embedded resource");
+        Log("来源：内置资源");
 
         try
         {
@@ -1156,22 +1156,22 @@ public partial class SetupPage : Page
 
             if (error != null)
             {
-                Log($"ERROR: {error}");
+                Log($"错误：{error}");
                 DeployStatusText.Text = S.Get("Setup_DeployFailed");
             }
             else
             {
                 var info = new FileInfo(destPath);
-                Log($"Deployed to: {destPath}");
-                Log($"Size: {info.Length:N0} bytes");
+                Log($"已部署到：{destPath}");
+                Log($"大小：{info.Length:N0} 字节");
                 DeployStatusText.Text = S.Format("Setup_DllInstalled", info.Length.ToString("N0"), info.LastWriteTime.ToString("g"));
                 Log("");
-                Log("DLL deployed successfully.");
+                Log("DLL 已成功部署。");
             }
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             DeployStatusText.Text = S.Get("Setup_DeployFailed");
         }
         finally
@@ -1202,20 +1202,20 @@ public partial class SetupPage : Page
 
         await EnsureSteamClosed();
 
-        Log("Removing cloud_redirect.dll...");
+        Log("正在移除 cloud_redirect.dll...");
 
         try
         {
             await Task.Run(() => File.Delete(dllPath));
             DeployStatusText.Text = S.Get("Setup_NotInstalled");
             UninstallDllButton.Visibility = Visibility.Collapsed;
-            Log($"Deleted {dllPath}");
+            Log($"已删除 {dllPath}");
             Log("");
-            Log("DLL uninstalled.");
+            Log("DLL 已卸载。");
         }
         catch (Exception ex)
         {
-            Log($"ERROR: {ex.Message}");
+            Log($"错误：{ex.Message}");
             DeployStatusText.Text = S.Get("Setup_UninstallFailedSteam");
         }
         finally

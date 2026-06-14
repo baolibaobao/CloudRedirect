@@ -17,6 +17,8 @@ internal static class UiCloudProviderFactory
         {
             "gdrive"   => new CliUiCloudProvider("gdrive", log),
             "onedrive" => new CliUiCloudProvider("onedrive", log),
+            "webdav"   => new CliUiCloudProvider("webdav", log),
+            "quark"    => new CliUiCloudProvider("quark", log),
             "folder"   => new FolderUiCloudProvider(log, config.SyncPath!),
             _          => null,
         };

@@ -29,6 +29,8 @@
                       SelectionChanged="ProviderCombo_SelectionChanged">
                 <ComboBoxItem Content="{res:Loc CloudProvider_GoogleDrive}" Tag="gdrive" />
                 <ComboBoxItem Content="{res:Loc CloudProvider_OneDrive}" Tag="onedrive" />
+                <ComboBoxItem Content="{res:Loc CloudProvider_WebDAV}" Tag="webdav" />
+                <ComboBoxItem Content="{res:Loc CloudProvider_Quark}" Tag="quark" />
                 <ComboBoxItem Content="{res:Loc CloudProvider_FolderMappedDrive}" Tag="folder" />
                 <ComboBoxItem Content="{res:Loc CloudProvider_LocalOnly}" Tag="local" />
             </ComboBox>
@@ -59,7 +61,39 @@
                        FontSize="11"
                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                        TextWrapping="Wrap"
-                       Margin="0,0,0,24" />
+                       Margin="0,0,0,16" />
+
+            <StackPanel x:Name="WebDavSettingsPanel" Visibility="Collapsed" Margin="0,0,0,24">
+                <TextBlock Text="{res:Loc CloudProvider_WebDAVSettings}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="WebDavServerUrlBox" PlaceholderText="{res:Loc CloudProvider_WebDAVServerUrlPlaceholder}" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="WebDavUsernameBox" PlaceholderText="{res:Loc CloudProvider_WebDAVUsernamePlaceholder}" Margin="0,0,0,8" />
+                <ui:PasswordBox x:Name="WebDavPasswordBox" PlaceholderText="{res:Loc CloudProvider_WebDAVPasswordPlaceholder}" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="WebDavRemoteRootBox" PlaceholderText="{res:Loc CloudProvider_WebDAVRemoteRootPlaceholder}" />
+            </StackPanel>
+
+            <StackPanel x:Name="QuarkSettingsPanel" Visibility="Collapsed" Margin="0,0,0,24">
+                <TextBlock Text="{res:Loc CloudProvider_QuarkSettings}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,8" />
+                <TextBlock Text="{res:Loc CloudProvider_QuarkCookieHint}" FontSize="11"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                <TextBox x:Name="QuarkCookieBox"
+                         Margin="0,0,0,8"
+                         MinHeight="88"
+                         MaxLength="200000"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled"
+                         SpellCheck.IsEnabled="False"
+                         Background="{DynamicResource ControlFillColorDefaultBrush}"
+                         Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" />
+                <ui:TextBox x:Name="QuarkOpenListPathBox" PlaceholderText="{res:Loc CloudProvider_OpenListPathPlaceholder}" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="QuarkDataDirBox" PlaceholderText="{res:Loc CloudProvider_OpenListDataDirPlaceholder}" Margin="0,0,0,8" />
+                <ui:TextBox x:Name="QuarkRemoteRootBox" PlaceholderText="{res:Loc CloudProvider_QuarkRemoteRootPlaceholder}" Margin="0,0,0,8" />
+                <CheckBox x:Name="QuarkForceStorageUpdateBox" Content="{res:Loc CloudProvider_QuarkForceStorageUpdate}" />
+            </StackPanel>
 
             <TextBlock Text="{res:Loc CloudProvider_Authentication}"
                        FontWeight="SemiBold"
@@ -92,6 +126,11 @@
                            Icon="{ui:SymbolIcon Dismiss24}"
                            Click="CancelAuth_Click"
                            Visibility="Collapsed" />
+                <ui:Button x:Name="TestConnectionButton"
+                           Content="{res:Loc CloudProvider_TestConnection}"
+                           Icon="{ui:SymbolIcon PlugConnected24}"
+                           Click="TestConnection_Click"
+                           Margin="8,0,0,0" />
             </StackPanel>
 
             <Border x:Name="LogBorder"

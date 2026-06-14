@@ -1,32 +1,32 @@
-<?xml version="1.0" encoding="utf-8"?>
-<root>
-  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
-    <xsd:element name="root" msdata:IsDataSet="true">
-      <xsd:complexType>
-        <xsd:choice maxOccurs="unbounded">
-          <xsd:element name="data">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="0" />
-              <xsd:attribute name="type" type="xsd:string" />
-              <xsd:attribute name="mimetype" type="xsd:string" />
-            </xsd:complexType>
-          </xsd:element>
-          <xsd:element name="resheader">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" use="required" />
-            </xsd:complexType>
-          </xsd:element>
-        </xsd:choice>
-      </xsd:complexType>
-    </xsd:element>
-  </xsd:schema>
+<?xml version='1.0' encoding='utf-8'?>
+<root xmlns:ns1="urn:schemas-microsoft-com:xml-msdata" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:schema id="root">
+    <xs:element name="root" ns1:IsDataSet="true">
+      <xs:complexType>
+        <xs:choice maxOccurs="unbounded">
+          <xs:element name="data">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
+                <xs:element name="comment" type="xsd:string" minOccurs="0" ns1:Ordinal="2" />
+              </xs:sequence>
+              <xs:attribute name="name" type="xsd:string" ns1:Ordinal="0" />
+              <xs:attribute name="type" type="xsd:string" />
+              <xs:attribute name="mimetype" type="xsd:string" />
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="resheader">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
+              </xs:sequence>
+              <xs:attribute name="name" type="xsd:string" use="required" />
+            </xs:complexType>
+          </xs:element>
+        </xs:choice>
+      </xs:complexType>
+    </xs:element>
+  </xs:schema>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
   </resheader>
@@ -39,7 +39,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-
   <data name="MainWindow_Title" xml:space="preserve">
     <value>CloudRedirect</value>
   </data>
@@ -73,7 +72,6 @@
   <data name="Nav_ChoiceMode" xml:space="preserve">
     <value>Modo</value>
   </data>
-
   <data name="Choice_Title" xml:space="preserve">
     <value>Escolha seu modo</value>
   </data>
@@ -113,7 +111,6 @@
   <data name="Choice_FailedSaveMode" xml:space="preserve">
     <value>Não foi possível salvar sua seleção: {0}</value>
   </data>
-
   <data name="Setup_Title" xml:space="preserve">
     <value>Configuração</value>
   </data>
@@ -216,7 +213,6 @@
   <data name="Setup_Ready" xml:space="preserve">
     <value>Pronto.</value>
   </data>
-
   <data name="Setup_SteamNotFoundManual" xml:space="preserve">
     <value>Não encontrado -- clique em Alterar para definir manualmente</value>
   </data>
@@ -459,7 +455,6 @@ Se pular esta etapa, os saves serão armazenados localmente na sua pasta do Stea
   <data name="Setup_UninstallDllTitle" xml:space="preserve">
     <value>Desinstalar DLL</value>
   </data>
-
   <data name="Dashboard_Title" xml:space="preserve">
     <value>Painel</value>
   </data>
@@ -505,7 +500,6 @@ Se pular esta etapa, os saves serão armazenados localmente na sua pasta do Stea
   <data name="Dashboard_RestartSteam" xml:space="preserve">
     <value>Reiniciar Steam</value>
   </data>
-
   <data name="Dashboard_NotFound" xml:space="preserve">
     <value>Não encontrado</value>
   </data>
@@ -594,7 +588,6 @@ Forçar encerramento?</value>
   <data name="Dashboard_CouldNotFindSteam" xml:space="preserve">
     <value>Não foi possível encontrar a instalação do Steam.</value>
   </data>
-
   <data name="CloudProvider_Title" xml:space="preserve">
     <value>Provedor de Nuvem</value>
   </data>
@@ -610,6 +603,12 @@ Forçar encerramento?</value>
   <data name="CloudProvider_OneDrive" xml:space="preserve">
     <value>OneDrive</value>
   </data>
+  <data name="CloudProvider_WebDAV" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
+  <data name="CloudProvider_Quark" xml:space="preserve">
+    <value>Quark Netdisk (OpenList)</value>
+  </data>
   <data name="CloudProvider_FolderMappedDrive" xml:space="preserve">
     <value>Pasta / Drive Mapeado</value>
   </data>
@@ -619,8 +618,20 @@ Forçar encerramento?</value>
   <data name="CloudProvider_TokenFilePath" xml:space="preserve">
     <value>Caminho do Arquivo de Token</value>
   </data>
+  <data name="CloudProvider_WebDAVConfigPath" xml:space="preserve">
+    <value>Caminho da configuração WebDAV</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigPath" xml:space="preserve">
+    <value>Caminho da configuração Quark OpenList</value>
+  </data>
   <data name="CloudProvider_TokenPlaceholder" xml:space="preserve">
     <value>Caminho para o arquivo de tokens OAuth</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigPlaceholder" xml:space="preserve">
+    <value>Caminho para webdav.json</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigPlaceholder" xml:space="preserve">
+    <value>Caminho para quark_openlist.json</value>
   </data>
   <data name="CloudProvider_Browse" xml:space="preserve">
     <value>Procurar</value>
@@ -643,7 +654,27 @@ Forçar encerramento?</value>
   <data name="CloudProvider_SaveConfiguration" xml:space="preserve">
     <value>Salvar Configuração</value>
   </data>
-
+  <data name="CloudProvider_TestConnection" xml:space="preserve">
+    <value>Test Connection</value>
+  </data>
+  <data name="CloudProvider_TestingProvider" xml:space="preserve">
+    <value>Testing provider: {0}</value>
+  </data>
+  <data name="CloudProvider_TestingConnection" xml:space="preserve">
+    <value>Testing connection...</value>
+  </data>
+  <data name="CloudProvider_TestConnectionSuccess" xml:space="preserve">
+    <value>Connection test succeeded.</value>
+  </data>
+  <data name="CloudProvider_TestConnectionFailedWithError" xml:space="preserve">
+    <value>Connection test failed: {0}</value>
+  </data>
+  <data name="CloudProvider_InvalidCliResponse" xml:space="preserve">
+    <value>Invalid CLI response: {0}</value>
+  </data>
+  <data name="CloudProvider_CliUnavailable" xml:space="preserve">
+    <value>Embedded CLI executable not available</value>
+  </data>
   <data name="CloudProvider_NoConfigFound" xml:space="preserve">
     <value>config.json não encontrado -- usando padrões</value>
   </data>
@@ -658,6 +689,12 @@ Forçar encerramento?</value>
   </data>
   <data name="CloudProvider_SyncFolderHint" xml:space="preserve">
     <value>Escolha qualquer pasta -- incluindo um drive de rede mapeado, pen drive ou compartilhamento NAS.</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigHint" xml:space="preserve">
+    <value>Campos JSON: server_url, username, password, remote_root_path. WebDAV genérico usa HTTPS.</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigHint" xml:space="preserve">
+    <value>Campos JSON: cookie, openlist_exe, data_dir, admin_password, base_url, remote_root_path. O token da API fica apenas em memória.</value>
   </data>
   <data name="CloudProvider_LocalStoragePath" xml:space="preserve">
     <value>Caminho do Armazenamento Local</value>
@@ -704,7 +741,60 @@ Forçar encerramento?</value>
   <data name="CloudProvider_NoTokenFilePath" xml:space="preserve">
     <value>Nenhum caminho de arquivo de token especificado</value>
   </data>
-
+  <data name="CloudProvider_NoWebDAVConfigPath" xml:space="preserve">
+    <value>Nenhum caminho de configuração WebDAV especificado</value>
+  </data>
+  <data name="CloudProvider_NoQuarkConfigPath" xml:space="preserve">
+    <value>Nenhum caminho de configuração Quark OpenList especificado</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigFound" xml:space="preserve">
+    <value>Arquivo de configuração WebDAV encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigFound" xml:space="preserve">
+    <value>Arquivo de configuração Quark OpenList encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_WebDAVConfigMissing" xml:space="preserve">
+    <value>Arquivo de configuração WebDAV não encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_QuarkConfigMissing" xml:space="preserve">
+    <value>Arquivo de configuração Quark OpenList não encontrado: {0}</value>
+  </data>
+  <data name="CloudProvider_WebDAVSettings" xml:space="preserve">
+    <value>WebDAV Settings</value>
+  </data>
+  <data name="CloudProvider_WebDAVServerUrlPlaceholder" xml:space="preserve">
+    <value>Server URL, e.g. https://example.com/dav</value>
+  </data>
+  <data name="CloudProvider_WebDAVUsernamePlaceholder" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="CloudProvider_WebDAVPasswordPlaceholder" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="CloudProvider_WebDAVRemoteRootPlaceholder" xml:space="preserve">
+    <value>Remote root path, e.g. /CloudRedirect</value>
+  </data>
+  <data name="CloudProvider_QuarkSettings" xml:space="preserve">
+    <value>Quark OpenList Settings</value>
+  </data>
+  <data name="CloudProvider_QuarkCookieHint" xml:space="preserve">
+    <value>Paste your Quark Cookie. It is saved to quark_openlist.json like GameSaveCloudQt; OpenList API tokens are kept in memory only.</value>
+  </data>
+  <data name="CloudProvider_QuarkCookiePlaceholder" xml:space="preserve">
+    <value>Quark Cookie</value>
+  </data>
+  <data name="CloudProvider_OpenListPathPlaceholder" xml:space="preserve">
+    <value>OpenList executable path</value>
+  </data>
+  <data name="CloudProvider_OpenListDataDirPlaceholder" xml:space="preserve">
+    <value>OpenList data directory</value>
+  </data>
+  <data name="CloudProvider_QuarkRemoteRootPlaceholder" xml:space="preserve">
+    <value>Remote root path, e.g. /Quark/CloudRedirect</value>
+  </data>
+  <data name="CloudProvider_QuarkForceStorageUpdate" xml:space="preserve">
+    <value>Force update OpenList Quark storage on next connection</value>
+  </data>
   <data name="Apps_Title" xml:space="preserve">
     <value>Apps</value>
   </data>
@@ -735,7 +825,6 @@ Forçar encerramento?</value>
   <data name="Apps_LoadingBackups" xml:space="preserve">
     <value>Carregando backups...</value>
   </data>
-
   <data name="Apps_DeleteAllSavesTitle" xml:space="preserve">
     <value>Excluir Todos os Saves</value>
   </data>
@@ -819,8 +908,6 @@ Você pode restaurar pelo painel Restaurar Saves.</value>
   <data name="Apps_DeleteFailedTitle" xml:space="preserve">
     <value>Exclusão Falhou</value>
   </data>
-
-  <!-- AppsPage orphan-blob prune -->
   <data name="Apps_ScanForOrphans" xml:space="preserve">
     <value>Buscar órfãos na nuvem</value>
   </data>
@@ -956,7 +1043,6 @@ Detalhes: {5}</value>
 
 Detalhes: {2}</value>
   </data>
-
   <data name="Apps_SteamNotFound" xml:space="preserve">
     <value>Steam não encontrado</value>
   </data>
@@ -979,7 +1065,7 @@ O backup contém: {1} arquivo(s) ({2})
 Apps: {3}
 
 IMPORTANTE: Antes de restaurar, você deve desativar o Steam Cloud para este jogo:
-  Steam > clique com o botão direito no jogo > Propriedades > Geral >
+  Steam &gt; clique com o botão direito no jogo &gt; Propriedades &gt; Geral &gt;
   desmarque "Manter saves do jogo no Steam Cloud"
 
 Se o Steam Cloud estiver ativado, o Steam pode sobrescrever os arquivos restaurados.
@@ -1018,7 +1104,6 @@ Ignorados {0} arquivo(s) (já existem no local original).</value>
   <data name="Apps_AppFallbackName" xml:space="preserve">
     <value>App {0}</value>
   </data>
-
   <data name="Cleanup_Title" xml:space="preserve">
     <value>Limpeza</value>
   </data>
@@ -1061,7 +1146,6 @@ Ignorados {0} arquivo(s) (já existem no local original).</value>
   <data name="Cleanup_LoadingBackups" xml:space="preserve">
     <value>Carregando backups...</value>
   </data>
-
   <data name="Cleanup_SteamNotFound" xml:space="preserve">
     <value>Steam não encontrado</value>
   </data>
@@ -1163,7 +1247,6 @@ Ignorados {0} arquivo(s) (já existem no local original).</value>
   <data name="Cleanup_UndoCompleteTitle" xml:space="preserve">
     <value>Desfazer Concluído</value>
   </data>
-
   <data name="Cleanup_Badge_CrossApp" xml:space="preserve">
     <value>cross-app</value>
   </data>
@@ -1182,7 +1265,6 @@ Ignorados {0} arquivo(s) (já existem no local original).</value>
   <data name="Cleanup_Badge_Unknown" xml:space="preserve">
     <value>unknown</value>
   </data>
-
   <data name="Cleanup_SuspectFiles" xml:space="preserve">
     <value>Arquivos Suspeitos</value>
   </data>
@@ -1238,7 +1320,6 @@ Local do backup: cloud_redirect/cleanup_tab_backup/{2}/
 
 Os arquivos podem ser restaurados pela aba Restaurar. Continuar?</value>
   </data>
-
   <data name="Settings_Title" xml:space="preserve">
     <value>Configurações</value>
   </data>
@@ -1281,7 +1362,6 @@ Os arquivos podem ser restaurados pela aba Restaurar. Continuar?</value>
   <data name="Settings_GitHub" xml:space="preserve">
     <value>GitHub</value>
   </data>
-
   <data name="Settings_VersionFormat" xml:space="preserve">
     <value>{0}.{1}.{2}</value>
   </data>
@@ -1331,7 +1411,6 @@ Tem certeza?</value>
   <data name="Settings_FailedReset" xml:space="preserve">
     <value>Falha ao redefinir: {0}</value>
   </data>
-
   <data name="Disclaimer_WindowTitle" xml:space="preserve">
     <value>AVISO</value>
   </data>
@@ -1380,14 +1459,12 @@ Tem certeza?</value>
   <data name="Disclaimer_AcceptButton" xml:space="preserve">
     <value>Eu Entendo os Riscos</value>
   </data>
-
   <data name="Disclaimer_CountdownFormat" xml:space="preserve">
     <value>Por favor leia com atenção... ({0}s)</value>
   </data>
   <data name="Disclaimer_Warned" xml:space="preserve">
     <value>Você foi avisado.</value>
   </data>
-
   <data name="Dialog_OK" xml:space="preserve">
     <value>OK</value>
   </data>
@@ -1403,19 +1480,23 @@ Tem certeza?</value>
   <data name="Dialog_YesDeleteEverything" xml:space="preserve">
     <value>Sim -- EXCLUIR TUDO</value>
   </data>
-
   <data name="Steam_IsRunningTitle" xml:space="preserve">
     <value>Steam Está em Execução</value>
   </data>
   <data name="Steam_IsRunningMessage" xml:space="preserve">
     <value>O Steam deve ser fechado antes de continuar. Feche o Steam e tente novamente.</value>
   </data>
-
   <data name="Provider_GoogleDrive" xml:space="preserve">
     <value>Google Drive</value>
   </data>
   <data name="Provider_OneDrive" xml:space="preserve">
     <value>OneDrive</value>
+  </data>
+  <data name="Provider_WebDAV" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
+  <data name="Provider_Quark" xml:space="preserve">
+    <value>Quark Netdisk (OpenList)</value>
   </data>
   <data name="Provider_FolderNetworkDrive" xml:space="preserve">
     <value>Pasta / Drive de Rede</value>
@@ -1423,7 +1504,6 @@ Tem certeza?</value>
   <data name="Provider_LocalOnly" xml:space="preserve">
     <value>Apenas local</value>
   </data>
-
   <data name="Backup_UnknownApp" xml:space="preserve">
     <value>App Desconhecido</value>
   </data>
@@ -1457,7 +1537,6 @@ Tem certeza?</value>
   <data name="Backup_NoFilesOnDisk" xml:space="preserve">
     <value>Nenhum arquivo de backup encontrado no disco</value>
   </data>
-
   <data name="Preview_SummaryFormat" xml:space="preserve">
     <value>Visualização: {0} arquivo(s) seriam restaurados, {1} ignorado(s) (já existem), {2} remotecache(s)</value>
   </data>
@@ -1471,14 +1550,12 @@ Tem certeza?</value>
   <data name="Preview_FailedTitle" xml:space="preserve">
     <value>Visualização Falhou</value>
   </data>
-
   <data name="EmbeddedDll_NotEmbedded" xml:space="preserve">
     <value>cloud_redirect.dll não está incluída neste build</value>
   </data>
   <data name="EmbeddedDll_InUse" xml:space="preserve">
     <value>cloud_redirect.dll está em uso (feche o Steam primeiro)</value>
   </data>
-
   <data name="Common_Info" xml:space="preserve">
     <value>Informação</value>
   </data>
@@ -1488,7 +1565,6 @@ Tem certeza?</value>
   <data name="Common_UpdateFailed" xml:space="preserve">
     <value>Atualização Falhou</value>
   </data>
-
   <data name="OAuth_AuthSuccessTitle" xml:space="preserve">
     <value>Autorização Bem-sucedida</value>
   </data>
@@ -1501,7 +1577,6 @@ Tem certeza?</value>
   <data name="OAuth_AuthFailedBody" xml:space="preserve">
     <value>Feche esta aba e tente novamente.</value>
   </data>
-
   <data name="Settings_Language" xml:space="preserve">
     <value>Idioma</value>
   </data>
@@ -1525,6 +1600,9 @@ Tem certeza?</value>
   </data>
   <data name="Settings_LanguageEnglish" xml:space="preserve">
     <value>English</value>
+  </data>
+  <data name="Settings_LanguageChineseSimplified" xml:space="preserve">
+    <value>Chinês simplificado</value>
   </data>
   <data name="Settings_LanguageSpanish" xml:space="preserve">
     <value>Español</value>
@@ -1562,14 +1640,12 @@ Tem certeza?</value>
   <data name="Settings_AutoUpdateDllHint" xml:space="preserve">
     <value>Verificar e instalar automaticamente versões mais novas do DLL do CloudRedirect quando o Steam iniciar. A atualização é aplicada no próximo reinício do Steam.</value>
   </data>
-
   <data name="Settings_CloudRedirectEnabled" xml:space="preserve">
     <value>Ativar redirecionamento de saves na nuvem</value>
   </data>
   <data name="Settings_CloudRedirectEnabledHint" xml:space="preserve">
     <value>Quando ativado, os saves na nuvem dos apps lua são interceptados e armazenados localmente (e opcionalmente sincronizados com seu provedor de nuvem). Quando desativado, apenas a fixação de manifestos e os patches ficam ativos. As alterações são aplicadas ao reiniciar o Steam.</value>
   </data>
-
   <data name="Settings_ManifestPinning" xml:space="preserve">
     <value>Fixação de manifestos</value>
   </data>
@@ -1588,7 +1664,6 @@ Tem certeza?</value>
   <data name="Settings_AutoCommentHint" xml:space="preserve">
     <value>Quando ativado, o SetManifestID especificado no lua será tratado como se estivesse comentado. Se desativado, o SetManifestID será respeitado, o que significa que seu jogo ficará travado na versão especificada no lua. Esta opção nunca modifica os arquivos lua em disco.</value>
   </data>
-
   <data name="Pin_PerAppTitle" xml:space="preserve">
     <value>Apps lua</value>
   </data>
@@ -1619,16 +1694,46 @@ Tem certeza?</value>
   <data name="Pin_FailedSavePinConfig" xml:space="preserve">
     <value>Não foi possível salvar a configuração de fixação: {0}</value>
   </data>
-
   <data name="Search_Placeholder" xml:space="preserve">
     <value>Buscar por nome ou ID do app...</value>
   </data>
-
+  <data name="Settings_Parental" xml:space="preserve">
+    <value>Tung Tung</value>
+  </data>
+  <data name="Settings_ParentalHint" xml:space="preserve">
+    <value>Six...six seven?</value>
+  </data>
+  <data name="Settings_ParentalIgnorePlaytime" xml:space="preserve">
+    <value>Ignorar restricoes de tempo de jogo</value>
+  </data>
+  <data name="Settings_ParentalIgnorePlaytimeHint" xml:space="preserve">
+    <value>Desativa restricoes de tempo de jogo. Informa o tempo ate o limite configurado, mas nao alem dele.</value>
+  </data>
+  <data name="Settings_ParentalBypassPlaytime" xml:space="preserve">
+    <value>Desativar restricoes familiares</value>
+  </data>
+  <data name="Settings_ParentalBypassPlaytimeHint" xml:space="preserve">
+    <value>Nenhuma restricao familiar do cliente e aplicada.</value>
+  </data>
   <data name="AppUpdate_Skip" xml:space="preserve">
     <value>Pular</value>
   </data>
   <data name="AppUpdate_UpdateNow" xml:space="preserve">
     <value>Atualizar agora</value>
   </data>
-
+  <data name="AppUpdate_ReleaseNotes" xml:space="preserve">
+    <value>Notas da versão</value>
+  </data>
+  <data name="AppUpdate_AvailableTitle" xml:space="preserve">
+    <value>Atualização disponível -- v{0}</value>
+  </data>
+  <data name="AppUpdate_AvailableStatus" xml:space="preserve">
+    <value>Uma nova versão do CloudRedirect está pronta para instalar.</value>
+  </data>
+  <data name="AppUpdate_DownloadingFormat" xml:space="preserve">
+    <value>Baixando v{0}...</value>
+  </data>
+  <data name="AppUpdate_FailedTitle" xml:space="preserve">
+    <value>Falha na atualização</value>
+  </data>
 </root>

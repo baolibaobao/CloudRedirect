@@ -9,6 +9,7 @@
 #include <winhttp.h>
 #include <memory>
 #include <string>
+#include <algorithm>
 
 using HttpUtil::Widen;
 using HttpUtil::HttpResp;
@@ -100,13 +101,21 @@ public:
             : "/";
 
         bool isHttps = fullUrl.substr(0, schemeEnd) == "https";
-        if (!isHttps) {
+        bool isHttp = fullUrl.substr(0, schemeEnd) == "http";
+        std::string hostForPolicy = host;
+        size_t policyColon = hostForPolicy.find(':');
+        if (policyColon != std::string::npos) hostForPolicy.resize(policyColon);
+        std::transform(hostForPolicy.begin(), hostForPolicy.end(), hostForPolicy.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
+        bool isLoopbackHttp = isHttp && (hostForPolicy == "127.0.0.1" || hostForPolicy == "localhost" ||
+                                        hostForPolicy == "[::1]" || hostForPolicy == "::1");
+        if (!isHttps && !isLoopbackHttp) {
             LOG("%s BLOCKED non-HTTPS request to %s", m_logTag, fullUrl.c_str());
             return {};
         }
         if (!m_session) return {};
 
-        INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
+        INTERNET_PORT port = isHttps ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
         size_t colonPos = host.find(':');
         if (colonPos != std::string::npos) {
             port = (INTERNET_PORT)atoi(host.substr(colonPos + 1).c_str());
@@ -121,7 +130,7 @@ public:
         auto wPath = Widen(path);
         HINTERNET hReq = WinHttpOpenRequest(hConn, wMethod.c_str(), wPath.c_str(),
             nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-            WINHTTP_FLAG_SECURE | WINHTTP_FLAG_ESCAPE_DISABLE);
+            (isHttps ? WINHTTP_FLAG_SECURE : 0) | WINHTTP_FLAG_ESCAPE_DISABLE);
         if (!hReq) { WinHttpCloseHandle(hConn); return {}; }
 
         for (auto& h : hdrs) {

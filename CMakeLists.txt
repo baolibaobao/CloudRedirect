@@ -80,6 +80,8 @@ set(PROVIDER_SOURCES
     src/providers/google_drive.cpp
     src/providers/onedrive.cpp
     src/providers/local_disk_provider.cpp
+    src/providers/webdav_provider.cpp
+    src/providers/quark_openlist_provider.cpp
 )
 
 if(WIN32)
@@ -343,9 +345,9 @@ endif()
 
 if(WIN32)
     add_custom_target(ui ALL
-        COMMAND dotnet publish -c Release -r win-x64 --self-contained false -o bin/publish
+        COMMAND dotnet publish -c Release -r win-x64 --self-contained false -o bin/publish /p:NativeBuildDir=${CMAKE_BINARY_DIR}/$<CONFIG>
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ui
         COMMENT "Publishing CloudRedirect UI"
-        DEPENDS cloud_redirect
+        DEPENDS cloud_redirect cloud_redirect_cli
     )
 endif()
