@@ -46,6 +46,9 @@ bool PromoteStagedBatchForCommit(uint32_t accountId, uint32_t appId,
                                  const std::vector<std::string>& uploads,
                                  const std::vector<std::string>& deletes);
 
+bool PromoteLocalManifestToCloud(uint32_t accountId, uint32_t appId,
+                                 const Manifest& manifest);
+
 std::vector<uint64_t> ListStagedBatchIds(uint32_t accountId, uint32_t appId);
 bool RemoveStagedBatch(uint32_t accountId, uint32_t appId, uint64_t batchId);
 

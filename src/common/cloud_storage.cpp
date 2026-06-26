@@ -1558,6 +1558,63 @@ bool PromoteStagedBatchForCommit(uint32_t accountId, uint32_t appId,
     return true;
 }
 
+bool PromoteLocalManifestToCloud(uint32_t accountId, uint32_t appId,
+                                 const Manifest& manifest) {
+    InflightSyncScope syncGuard;
+    if (!syncGuard) return false;
+
+    if (!g_provider || !g_provider->IsAuthenticated()) {
+        LOG("[CloudStorage] PromoteLocalManifest app %u: cloud provider unavailable",
+            appId);
+        return false;
+    }
+
+    std::vector<ICloudProvider::UploadItem> items;
+    items.reserve(manifest.size());
+
+    for (const auto& [filename, entry] : manifest) {
+        if (CloudIntercept::IsReservedBlobFilename(filename)) continue;
+
+        std::string localPath = LocalBlobPath(accountId, appId, filename);
+        std::vector<uint8_t> data;
+        if (!TryReadCachedBlob(localPath, filename, data)) {
+            LOG("[CloudStorage] PromoteLocalManifest app %u: cached blob missing for %s",
+                appId, filename.c_str());
+            return false;
+        }
+
+        std::string shaHex = ShaToHex(FileUtil::SHA1(data.data(), data.size()));
+        ICloudProvider::UploadItem item;
+        item.path = CloudBlobPathByNameAndSHA(accountId, appId, filename, shaHex);
+        item.data = std::move(data);
+        items.push_back(std::move(item));
+    }
+
+    if (!items.empty()) {
+        std::vector<ICloudProvider::UploadItem> newItems;
+        newItems.reserve(items.size());
+        for (auto& item : items) {
+            if (g_provider->CheckExists(item.path) == ICloudProvider::ExistsStatus::Exists) {
+                LOG("[CloudStorage] PromoteLocalManifest app %u: CAS dedup skipped %s",
+                    appId, item.path.c_str());
+                continue;
+            }
+            newItems.push_back(std::move(item));
+        }
+
+        if (!newItems.empty() && !g_provider->UploadBatch(newItems)) {
+            LOG("[CloudStorage] PromoteLocalManifest app %u: batch upload failed",
+                appId);
+            return false;
+        }
+    }
+
+    LOG("[CloudStorage] PromoteLocalManifest app %u: promoted %zu file(s)",
+        appId, manifest.size());
+    InvalidateBlobIndex(accountId, appId);
+    return true;
+}
+
 std::vector<uint64_t> ListStagedBatchIds(uint32_t accountId, uint32_t appId) {
     std::vector<uint64_t> batchIds;
     InflightSyncScope guard;

@@ -15,6 +15,7 @@ namespace CloudRedirect.Pages;
 public partial class SetupPage : Page
 {
     private string? _steamPath;
+    private InjectionBackend _backend = InjectionBackend.SteamTools;
     private readonly StringBuilder _logBuffer = new();
     private readonly object _logLock = new();
     private bool _isRunning;
@@ -31,6 +32,7 @@ public partial class SetupPage : Page
             try
             {
                 _steamPath = await Task.Run(() => SteamDetector.FindSteamPath());
+                _backend = DeploymentBackendService.GetBackend(_steamPath);
 
                 var mode = SteamDetector.ReadModeSetting();
                 if (mode == "stfixer")
@@ -126,6 +128,8 @@ public partial class SetupPage : Page
             PatchRevertButton.IsEnabled = !busy;
             DeployButton.IsEnabled = !busy;
             UninstallDllButton.IsEnabled = !busy;
+            UseOpenSteamToolButton.IsEnabled = !busy;
+            UseSteamToolsButton.IsEnabled = !busy;
 
         });
     }
@@ -232,9 +236,10 @@ public partial class SetupPage : Page
         long DllLength,
         DateTime DllLastWrite,
         bool? DllIsCurrent,
-        bool EmbeddedAvailable);
+        bool EmbeddedAvailable,
+        OpenSteamToolStatus? OpenSteamToolStatus);
 
-    private static StatusSnapshot ComputeStatusSnapshot(string steamPath)
+    private static StatusSnapshot ComputeStatusSnapshot(string steamPath, InjectionBackend backend)
     {
         var version = SteamDetector.GetSteamVersion(steamPath);
         var offline = PatchState.NotInstalled;
@@ -243,18 +248,21 @@ public partial class SetupPage : Page
         var probeFailed = false;
         string? probeError = null;
 
-        try
+        if (backend == InjectionBackend.SteamTools)
         {
-            // One Patcher instance so the AES-decrypted payload cache is reused.
-            var patcher = new Patcher(steamPath, _ => { });
-            offline = patcher.GetOfflinePatchState();
-            stExe = patcher.GetSteamToolsExePatchState();
-            patchState = patcher.GetPatchState();
-        }
-        catch (Exception ex)
-        {
-            probeFailed = true;
-            probeError = ex.Message;
+            try
+            {
+                // One Patcher instance so the AES-decrypted payload cache is reused.
+                var patcher = new Patcher(steamPath, _ => { });
+                offline = patcher.GetOfflinePatchState();
+                stExe = patcher.GetSteamToolsExePatchState();
+                patchState = patcher.GetPatchState();
+            }
+            catch (Exception ex)
+            {
+                probeFailed = true;
+                probeError = ex.Message;
+            }
         }
 
         var dllExists = false;
@@ -292,7 +300,10 @@ public partial class SetupPage : Page
             DllLength: dllLength,
             DllLastWrite: dllLastWrite,
             DllIsCurrent: dllIsCurrent,
-            EmbeddedAvailable: EmbeddedDll.IsAvailable());
+            EmbeddedAvailable: EmbeddedDll.IsAvailable(),
+            OpenSteamToolStatus: backend == InjectionBackend.OpenSteamTool
+                ? DeploymentBackendService.GetOpenSteamToolStatus(steamPath)
+                : null);
     }
 
     private async Task RefreshStatuses()
@@ -308,6 +319,7 @@ public partial class SetupPage : Page
             PatchStatusText.Text = S.Get("Setup_SteamNotFound");
             DeployStatusText.Text = S.Get("Setup_SteamNotFound");
             VersionStatusText.Text = S.Get("Setup_VersionCouldNotDetermine");
+            BackendStatusText.Text = "未找到 Steam，无法检测注入后端";
             VersionIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Warning24;
             return;
         }
@@ -317,7 +329,8 @@ public partial class SetupPage : Page
         StatusSnapshot snap;
         try
         {
-            snap = await Task.Run(() => ComputeStatusSnapshot(capturedPath));
+            var capturedBackend = _backend;
+            snap = await Task.Run(() => ComputeStatusSnapshot(capturedPath, capturedBackend));
         }
         catch (Exception ex)
         {
@@ -353,6 +366,7 @@ public partial class SetupPage : Page
     private void ApplyStatusSnapshot(StatusSnapshot snap)
     {
         ApplyVersionStatus(snap.Version);
+        ApplyBackendStatus(snap.OpenSteamToolStatus);
 
         if (snap.ProbeFailed)
         {
@@ -399,12 +413,60 @@ public partial class SetupPage : Page
         }
     }
 
+    private void ApplyBackendStatus(OpenSteamToolStatus? openSteamToolStatus)
+    {
+        if (_backend == InjectionBackend.OpenSteamTool)
+        {
+            DiagnosticsPanel.Visibility = DiagnosticsToggle.IsChecked == true
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            if (openSteamToolStatus == null)
+            {
+                BackendStatusText.Text = "OpenSteamTool 模式：等待检测";
+                return;
+            }
+
+            var ready = openSteamToolStatus.OpenSteamToolDllExists
+                && openSteamToolStatus.SupportsCloudRedirect
+                && openSteamToolStatus.ConfigExists
+                && openSteamToolStatus.CloudEnabled
+                && openSteamToolStatus.LibraryConfigured;
+
+            BackendStatusText.Text = ready
+                ? "OpenSteamTool 模式已就绪：已启用 [cloud] 并指向 cloud_redirect.dll"
+                : !openSteamToolStatus.OpenSteamToolDllExists
+                    ? "OpenSteamTool 模式：未检测到 OpenSteamTool.dll"
+                    : !openSteamToolStatus.SupportsCloudRedirect
+                        ? "OpenSteamTool 模式：当前 OpenSteamTool.dll 不包含 CloudRedirect 适配层，需要更新到支持 [cloud] 的版本"
+                        : "OpenSteamTool 模式：点击“运行全部补丁”会部署 cloud_redirect.dll 并写入 opensteamtool.toml；Lua/AppID 请你自行维护";
+            RunAllButton.Content = "配置 OpenSteamTool + 部署 DLL";
+            PatchButton.IsEnabled = false;
+            OfflineSetupButton.IsEnabled = false;
+            StExePatchButton.IsEnabled = false;
+            return;
+        }
+
+        BackendStatusText.Text = "SteamTools 模式：使用原有 payload 补丁流程";
+        RunAllButton.Content = S.Get("Setup_RunAllPatches");
+        PatchButton.IsEnabled = !_isRunning;
+        OfflineSetupButton.IsEnabled = !_isRunning;
+        StExePatchButton.IsEnabled = !_isRunning;
+    }
+
     private void ApplyVersionStatus(long? version)
     {
         if (version == null)
         {
             VersionStatusText.Text = S.Get("Setup_VersionCouldNotDetermine");
             VersionIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Warning24;
+            return;
+        }
+
+        if (_backend == InjectionBackend.OpenSteamTool)
+        {
+            VersionStatusText.Text = $"{version.Value}（OpenSteamTool 模式：不使用 SteamTools 补丁版本白名单）";
+            VersionIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Info24;
             return;
         }
 
@@ -564,6 +626,12 @@ public partial class SetupPage : Page
     private async void RunAll_Click(object sender, RoutedEventArgs e)
     {
         if (_isRunning || _steamPath == null) return;
+
+        if (_backend == InjectionBackend.OpenSteamTool)
+        {
+            await RunOpenSteamToolSetupAsync();
+            return;
+        }
 
         var confirm = await Services.Dialog.ConfirmAsync(S.Get("Setup_RunAllPatches"),
             S.Get("Setup_ConfirmRunAll"));
@@ -800,6 +868,98 @@ public partial class SetupPage : Page
             await PromptAutoUpdateAsync();
 
         SetBusy(false);
+    }
+
+    private async Task RunOpenSteamToolSetupAsync()
+    {
+        var confirm = await Services.Dialog.ConfirmAsync(
+            "配置 OpenSteamTool",
+            "这会执行 OpenSteamTool 兼容配置：\n\n" +
+            "  1. 关闭 Steam\n" +
+            "  2. 部署/更新 cloud_redirect.dll 到 Steam 根目录\n" +
+            "  3. 写入 opensteamtool.toml 的 [cloud] 配置\n\n" +
+            "不会复制 dwmapi.dll、xinput1_4.dll、OpenSteamTool.dll，也不会修改你的 Lua/AppID。\n\n继续？");
+
+        if (!confirm) return;
+
+        SetBusy(true);
+        ClearLog();
+
+        try
+        {
+            await EnsureSteamClosed();
+
+            Log("═══ OpenSteamTool 模式：部署 cloud_redirect.dll ═══");
+            if (!EmbeddedDll.IsAvailable())
+            {
+                Log("失败：此构建未嵌入 cloud_redirect.dll。");
+                DeployStatusText.Text = S.Get("Setup_DllNotEmbedded");
+                return;
+            }
+
+            var destPath = Path.Combine(_steamPath!, "cloud_redirect.dll");
+            var deployError = await Task.Run(() => EmbeddedDll.DeployTo(destPath));
+            if (deployError != null)
+            {
+                Log($"失败：{deployError}");
+                DeployStatusText.Text = S.Get("Setup_DeployFailed");
+                return;
+            }
+
+            var info = new FileInfo(destPath);
+            Log($"已部署：{destPath}");
+            Log($"大小：{info.Length:N0} 字节");
+            DeployStatusText.Text = S.Format("Setup_DllInstalled", info.Length.ToString("N0"), info.LastWriteTime.ToString("g"));
+            Log("");
+
+            Log("═══ OpenSteamTool 模式：写入 opensteamtool.toml ═══");
+            await Task.Run(() => DeploymentBackendService.ConfigureOpenSteamToolCloud(_steamPath!));
+            var ostStatus = DeploymentBackendService.GetOpenSteamToolStatus(_steamPath!);
+            if (!ostStatus.OpenSteamToolDllExists)
+            {
+                Log("警告：Steam 根目录未检测到 OpenSteamTool.dll。你说已经安装了，如果放在其他位置，请确认 Steam 实际会加载它。");
+            }
+            else if (!ostStatus.SupportsCloudRedirect)
+            {
+                Log("警告：当前 OpenSteamTool.dll 不包含 CloudRedirect 适配层。");
+                Log("它不会加载 cloud_redirect.dll；请更新到包含 [cloud] / CR_InitCloudSave / CR_HandleCloudRpc 的 OpenSteamTool 构建，或改回 SteamTools 模式。");
+            }
+            Log($"已更新：{ostStatus.ConfigPath}");
+            Log("[cloud]");
+            Log("enabled = true");
+            Log("library = \"cloud_redirect.dll\"");
+            Log("");
+            Log("完成。请确认你的 OpenSteamTool Lua 中已经 addappid(游戏ID)，然后重启 Steam 测试。");
+
+            await RefreshStatuses();
+        }
+        catch (Exception ex)
+        {
+            Log($"错误：{ex.Message}");
+        }
+        finally
+        {
+            SetBusy(false);
+            await RefreshStatuses();
+        }
+    }
+
+    private async void UseOpenSteamTool_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isRunning) return;
+        _backend = InjectionBackend.OpenSteamTool;
+        DeploymentBackendService.SaveBackendSetting(_backend);
+        Log("已切换到 OpenSteamTool 模式。");
+        await RefreshStatuses();
+    }
+
+    private async void UseSteamTools_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isRunning) return;
+        _backend = InjectionBackend.SteamTools;
+        DeploymentBackendService.SaveBackendSetting(_backend);
+        Log("已切换到 SteamTools 模式。");
+        await RefreshStatuses();
     }
 
     private static bool HasBeenPromptedForAutoUpdate()

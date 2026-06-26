@@ -527,6 +527,12 @@ static void BootstrapWorker(uint32_t accountId, uint32_t appId, uint64_t cacheGe
         CloudStorage::CloudAppState state;
         state.cn = cn;
         auto localManifest = CloudStorage::LoadLocalManifest(accountId, appId);
+        if (!CloudStorage::PromoteLocalManifestToCloud(accountId, appId, localManifest)) {
+            LOG("[AutoCloudImport] Promote local blobs failed for app %u; cloud state publish deferred",
+                appId);
+            finish(false, publishGeneration);
+            return;
+        }
         for (const auto& [name, me] : localManifest) {
             CloudStorage::FileEntry fe;
             fe.sha = me.sha;
@@ -534,7 +540,12 @@ static void BootstrapWorker(uint32_t accountId, uint32_t appId, uint64_t cacheGe
             fe.size = me.size;
             state.files[name] = std::move(fe);
         }
-        CloudStorage::PublishCloudState(accountId, appId, state);
+        if (!CloudStorage::PublishCloudState(accountId, appId, state)) {
+            LOG("[AutoCloudImport] Publish cloud state failed for app %u; will retry on next sync",
+                appId);
+            finish(false, publishGeneration);
+            return;
+        }
     }
 
     // Re-check generation; concurrent invalidation bumps it.

@@ -65,6 +65,7 @@ public partial class AppsPage : Page
             var blobsPath = Path.Combine(steamPath, "cloud_redirect", "blobs");
 
             var result = new List<AppInfo>();
+            var resultByAppId = new Dictionary<string, AppInfo>(StringComparer.OrdinalIgnoreCase);
 
             if (Directory.Exists(storagePath))
             {
@@ -126,9 +127,38 @@ public partial class AppsPage : Page
                         info.TotalSize = FileUtils.FormatSize(totalBytes);
 
                         result.Add(info);
+                        resultByAppId[appId] = info;
                     }
                 }
             }
+
+            if (DeploymentBackendService.GetBackend(steamPath) == InjectionBackend.OpenSteamTool)
+            {
+                foreach (var appId in DeploymentBackendService.ScanOpenSteamToolLuaAppIds(steamPath))
+                {
+                    var key = appId.ToString();
+                    if (resultByAppId.ContainsKey(key)) continue;
+
+                    var info = new AppInfo
+                    {
+                        AppId = key,
+                        AccountId = "",
+                        FileCount = 0,
+                        TotalSize = "未同步",
+                        ChangeNumber = "-",
+                        RootTokens = "来自 OpenSteamTool Lua 清单"
+                    };
+                    result.Add(info);
+                    resultByAppId[key] = info;
+                }
+            }
+
+            result.Sort((a, b) =>
+            {
+                if (uint.TryParse(a.AppId, out var left) && uint.TryParse(b.AppId, out var right))
+                    return left.CompareTo(right);
+                return string.Compare(a.AppId, b.AppId, StringComparison.OrdinalIgnoreCase);
+            });
 
             return result;
         });
@@ -261,6 +291,12 @@ public partial class AppsPage : Page
     private async void DeleteApp_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: AppInfo app }) return;
+        if (string.IsNullOrWhiteSpace(app.AccountId))
+        {
+            await Dialog.ShowInfoAsync("尚无同步数据",
+                "这个应用来自 OpenSteamTool Lua 清单，但 CloudRedirect 还没有为它生成本地同步数据。请先启动游戏完成一次云同步后再管理存档。");
+            return;
+        }
 
         var steamPath = SteamDetector.FindSteamPath();
         if (steamPath == null) return;
@@ -545,6 +581,9 @@ public partial class AppsPage : Page
 
             foreach (var app in _allApps)
             {
+                if (string.IsNullOrWhiteSpace(app.AccountId))
+                    continue;
+
                 i++;
                 ScanOrphansButton.Content = S.Format(
                     "Apps_ScanningOrphansFormat", i, _allApps.Count);

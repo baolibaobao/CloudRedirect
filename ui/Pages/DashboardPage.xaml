@@ -89,6 +89,19 @@
                 <ui:SymbolIcon x:Name="DllIcon" Symbol="PlugConnected24" FontSize="24" />
             </ui:CardControl>
 
+            <ui:CardControl Margin="0,0,0,12">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock Text="注入后端" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="BackendStatus"
+                                   Text="正在检测..."
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:SymbolIcon x:Name="BackendIcon" Symbol="PlugConnected24" FontSize="24" />
+            </ui:CardControl>
+
             <TextBlock Text="{res:Loc Dashboard_QuickActions}"
                        FontSize="20" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"

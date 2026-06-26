@@ -1195,6 +1195,8 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     uint64_t appBuildIdHwm = 0;
     CloudStorage::CloudAppState fetchedState; // retained for quota caching
     bool haveFetchedState = false;
+    bool cloudStateMissing = false;
+    bool cloudStateFetchFailed = false;
 
     if (CloudStorage::IsCloudActive()) {
         SetRpcCrashContext("GetChangelist:fetch-cloud", "Cloud.GetAppFileChangelist#1", appId);
@@ -1226,9 +1228,11 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
             LOG("[NS-CL] GetAppFileChangelist app=%u: cloud state CN=%llu (%zu files)",
                 appId, cloudCN, cloudManifest.size());
         } else if (stateResult.status == CloudStorage::StateFetchStatus::NotFound) {
+            cloudStateMissing = true;
             LOG("[NS-CL] GetAppFileChangelist app=%u: no cloud state (new app), using local",
                 appId);
         } else {
+            cloudStateFetchFailed = true;
             LOG("[NS-CL] GetAppFileChangelist app=%u: cloud state fetch failed (status=%d), using local",
                 appId, static_cast<int>(stateResult.status));
         }
@@ -1262,7 +1266,7 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     AutoCloudBootstrap::Bootstrap(accountId, appId, /*wait=*/false);
     bool bootstrapActive = AutoCloudBootstrap::IsActive(accountId, appId);
 
-    if (CloudStorage::IsCloudActive() && cloudCN == 0 && !bootstrapActive) {
+    if (CloudStorage::IsCloudActive() && (cloudCN == 0 || cloudStateMissing) && !cloudStateFetchFailed && !bootstrapActive) {
         SetRpcCrashContext("GetChangelist:promote-local", "Cloud.GetAppFileChangelist#1", appId);
         uint64_t localCN = LocalStorage::GetChangeNumber(accountId, appId);
         if (localCN > 0) {
@@ -1275,6 +1279,10 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
             if (nonReserved > 0) {
                 LOG("[NS-CL] No cloud CN for app %u, publishing %zu local files at CN=%llu",
                     appId, nonReserved, localCN);
+                if (!CloudStorage::PromoteLocalManifestToCloud(accountId, appId, fullManifest)) {
+                    LOG("[NS-CL] Local publish for app %u deferred: blob promotion failed",
+                        appId);
+                } else {
                 CloudStorage::CloudAppState bootstrapState;
                 bootstrapState.cn = localCN;
                 for (const auto& [name, me] : fullManifest) {
@@ -1302,6 +1310,7 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
                     }
                     CloudStorage::PublishCloudState(asyncAcct, asyncApp, *statePtr);
                 }).detach();
+                }
             }
         }
     }

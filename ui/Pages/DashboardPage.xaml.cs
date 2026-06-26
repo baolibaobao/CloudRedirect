@@ -44,9 +44,15 @@ public partial class DashboardPage : Page
             Services.CloudConfig config = null;
             int appCount = 0;
             Services.TokenStatus tokenStatus = null;
+            Services.InjectionBackend backend = Services.InjectionBackend.SteamTools;
+            Services.OpenSteamToolStatus ostStatus = null;
 
             if (steamPath != null)
             {
+                backend = Services.DeploymentBackendService.GetBackend(steamPath);
+                if (backend == Services.InjectionBackend.OpenSteamTool)
+                    ostStatus = Services.DeploymentBackendService.GetOpenSteamToolStatus(steamPath);
+
                 var dllPath = Path.Combine(steamPath, "cloud_redirect.dll");
                 dllExists = File.Exists(dllPath);
                 if (dllExists)
@@ -65,7 +71,7 @@ public partial class DashboardPage : Page
                     tokenStatus = Services.OAuthService.CheckTokenStatus(config.TokenPath);
             }
 
-            return (steamPath, dllExists, dllCurrent, config, appCount, tokenStatus);
+            return (steamPath, dllExists, dllCurrent, config, appCount, tokenStatus, backend, ostStatus);
         });
 
         _steamPath = data.steamPath;
@@ -96,7 +102,42 @@ public partial class DashboardPage : Page
                 UpdateProviderAuthStatus(data.config, data.tokenStatus);
 
             AppCount.Text = S.Format("Dashboard_AppCountFormat", data.appCount);
+            UpdateBackendStatus(data.backend, data.ostStatus);
         }
+    }
+
+    private void UpdateBackendStatus(Services.InjectionBackend backend, Services.OpenSteamToolStatus ostStatus)
+    {
+        if (backend == Services.InjectionBackend.OpenSteamTool)
+        {
+            if (ostStatus == null)
+            {
+                BackendStatus.Text = "OpenSteamTool 模式：等待检测";
+                BackendIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.PlugDisconnected24;
+                return;
+            }
+
+            var ready = ostStatus.OpenSteamToolDllExists
+                && ostStatus.SupportsCloudRedirect
+                && ostStatus.ConfigExists
+                && ostStatus.CloudEnabled
+                && ostStatus.LibraryConfigured;
+
+            BackendStatus.Text = ready
+                ? "OpenSteamTool 模式已就绪"
+                : !ostStatus.OpenSteamToolDllExists
+                    ? "OpenSteamTool 模式未完成：未检测到 OpenSteamTool.dll"
+                    : !ostStatus.SupportsCloudRedirect
+                        ? "OpenSteamTool 模式不可用：当前 OpenSteamTool.dll 不支持 CloudRedirect [cloud]"
+                        : "OpenSteamTool 模式未完成：请到安装设置页写入 [cloud] 配置";
+            BackendIcon.Symbol = ready
+                ? Wpf.Ui.Controls.SymbolRegular.PlugConnected24
+                : Wpf.Ui.Controls.SymbolRegular.Warning24;
+            return;
+        }
+
+        BackendStatus.Text = "SteamTools 模式";
+        BackendIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Wrench24;
     }
 
     private void UpdateProviderAuthStatus(Services.CloudConfig config, Services.TokenStatus preCheckedStatus)

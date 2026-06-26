@@ -53,6 +53,25 @@ Run the EXE. Pick your mode - STfixer mode for fixes to ST bugs, CloudRedirect m
 
 That's it. Go launch Steam and watch the magic.
 
+### OpenSteamTool backend
+
+If you already use OpenSteamTool, CloudRedirect can use it as the injection backend instead of patching SteamTools:
+
+1. Keep your existing OpenSteamTool files in the Steam root directory.
+2. In CloudRedirect Setup, select **Use OpenSteamTool**.
+3. Click **Configure OpenSteamTool + Deploy DLL**.
+4. CloudRedirect only deploys `cloud_redirect.dll` and writes:
+
+```toml
+[cloud]
+enabled = true
+library = "cloud_redirect.dll"
+```
+
+CloudRedirect does **not** copy `dwmapi.dll`, `xinput1_4.dll`, or `OpenSteamTool.dll`, and it does **not** edit your OpenSteamTool Lua files. Add games yourself with `addappid(<appId>)`.
+
+Do not enable SteamTools and OpenSteamTool cloud redirection at the same time.
+
 ## Windows 中文快速使用（夸克 OpenList）
 
 1. 运行 `ui/bin/publish/CloudRedirect.exe`。
