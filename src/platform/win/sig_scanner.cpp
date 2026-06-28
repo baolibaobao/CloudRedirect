@@ -326,6 +326,8 @@ bool LooksLikePrologue(uintptr_t addr) {
     if (b[0] == 0x81 && b[1] == 0xFA) return true;
     // mov r8d, [rcx+N] (load from this ptr, common leaf start)
     if (b[0] == 0x44 && b[1] == 0x8B && b[2] == 0x41) return true;
+    // test rcx, rcx (null-guard on this ptr, common for small functions)
+    if (b[0] == 0x48 && b[1] == 0x85 && b[2] == 0xC9) return true;
     return false;
 }
 
