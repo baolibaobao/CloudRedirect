@@ -66,6 +66,7 @@ private:
                                   const std::vector<std::string>& extraHeaders = {});
     bool Mkdir(const std::string& remotePath);
     bool RemoveRemote(const std::string& remotePath);
+    void CleanupLegacyHealthFiles();
     bool ListRecursive(const std::string& remotePath, const std::string& relPrefix,
                        std::vector<FileInfo>& outFiles, bool* outComplete, int depth = 0);
     bool BuildDownloadCandidates(const Json::Value& data, const std::string& remotePath,

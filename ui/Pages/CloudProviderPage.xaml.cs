@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -552,6 +553,15 @@ public partial class CloudProviderPage : Page
         catch { return fallback; }
     }
 
+    private static string GenerateOpenListAdminPassword()
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+        Span<char> chars = stackalloc char[28];
+        for (var i = 0; i < chars.Length; i++)
+            chars[i] = alphabet[RandomNumberGenerator.GetInt32(alphabet.Length)];
+        return new string(chars);
+    }
+
     private static void WriteJsonFile(string path, Action<Utf8JsonWriter> write)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -588,10 +598,16 @@ public partial class CloudProviderPage : Page
             QuarkOpenListPathBox.Text = openListPath;
 
         var existingPassword = ExistingString(path, "admin_password");
+        if (string.IsNullOrWhiteSpace(existingPassword))
+            existingPassword = GenerateOpenListAdminPassword();
         var existingCookie = ExistingString(path, "cookie");
-        var cookie = QuarkCookieBox.Text ?? "";
+        var enteredCookie = QuarkCookieBox.Text?.Trim() ?? "";
+        var cookie = enteredCookie;
         if (string.IsNullOrEmpty(cookie))
             cookie = existingCookie;
+        var forceStorageUpdate = QuarkForceStorageUpdateBox.IsChecked == true
+            || (!string.IsNullOrEmpty(enteredCookie)
+                && !enteredCookie.Equals(existingCookie, StringComparison.Ordinal));
 
         WriteJsonFile(path, writer =>
         {
@@ -602,7 +618,7 @@ public partial class CloudProviderPage : Page
             writer.WriteString("base_url", "http://127.0.0.1:5244");
             writer.WriteString("mount_path", "/Quark");
             writer.WriteString("remote_root_path", string.IsNullOrWhiteSpace(QuarkRemoteRootBox.Text) ? "/Quark/CloudRedirect" : QuarkRemoteRootBox.Text.Trim());
-            writer.WriteBoolean("force_storage_update", QuarkForceStorageUpdateBox.IsChecked == true);
+            writer.WriteBoolean("force_storage_update", forceStorageUpdate);
         });
     }
 

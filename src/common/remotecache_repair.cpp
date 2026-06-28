@@ -120,4 +120,64 @@ bool UpdateRemotecacheChangeNumber(const std::string& original,
     return true;
 }
 
+bool MarkRemotecacheSynced(const std::string& original,
+                           uint32_t appId,
+                           uint64_t newChangeNumber,
+                           std::string& outUpdated) {
+    if (!UpdateRemotecacheChangeNumber(original, appId, newChangeNumber, outUpdated)) {
+        return false;
+    }
+
+    std::string appIdStr = std::to_string(appId);
+    const char* appSection[] = { appIdStr.c_str() };
+    std::vector<std::string> fileSections;
+    if (!VdfUtil::ForEachChildInSection(outUpdated, appSection, 1,
+        [&](std::string_view name) {
+            if (name != "ChangeNumber" && name != "OSType") {
+                fileSections.emplace_back(name);
+            }
+            return true;
+        })) {
+        return false;
+    }
+
+    for (const auto& filename : fileSections) {
+        const char* fileSection[] = { appIdStr.c_str(), filename.c_str() };
+        bool foundSyncState = false;
+        VdfUtil::ForEachFieldInSection(outUpdated, fileSection, 2,
+            [&](const VdfUtil::FieldInfo& fi) {
+                if (fi.key == "syncstate") {
+                    outUpdated.replace(fi.valStart, fi.valEnd - fi.valStart, "1");
+                    foundSyncState = true;
+                    return false;
+                }
+                return true;
+            });
+
+        if (foundSyncState) continue;
+
+        size_t sectionStart = 0;
+        size_t sectionEnd = 0;
+        if (!VdfUtil::FindVdfSectionRange(outUpdated, fileSection, 2,
+                                          sectionStart, sectionEnd)) {
+            continue;
+        }
+        std::string indent = "\t\t";
+        size_t lineStart = outUpdated.rfind('\n', sectionEnd);
+        if (lineStart != std::string::npos) {
+            ++lineStart;
+            size_t indentEnd = lineStart;
+            while (indentEnd < outUpdated.size() &&
+                   (outUpdated[indentEnd] == '\t' || outUpdated[indentEnd] == ' ')) {
+                ++indentEnd;
+            }
+            indent.assign(outUpdated.data() + lineStart, indentEnd - lineStart);
+            indent.push_back('\t');
+        }
+        outUpdated.insert(sectionEnd, indent + "\"syncstate\"\t\t\"1\"\n");
+    }
+
+    return true;
+}
+
 } // namespace CloudIntercept

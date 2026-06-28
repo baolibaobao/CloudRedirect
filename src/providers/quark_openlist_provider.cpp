@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <sstream>
 #include <thread>
 #include <utility>
 
@@ -53,6 +54,24 @@ bool IsOpenListMissing(const Json::Value& root) {
     return ContainsInsensitive(msg, "not exist") ||
            ContainsInsensitive(msg, "not found") ||
            ContainsInsensitive(msg, "no such");
+}
+
+std::string StorageCookie(const Json::Value& storage) {
+    auto addition = storage["addition"];
+    if (addition.type == Json::Type::Object) {
+        return Trim(addition["cookie"].str());
+    }
+
+    auto additionText = addition.str();
+    if (additionText.empty()) return {};
+
+    auto parsed = Json::Parse(additionText);
+    if (parsed.type != Json::Type::Object) return {};
+    return Trim(parsed["cookie"].str());
+}
+
+bool StorageCachePolicyNeedsUpdate(const Json::Value& storage) {
+    return storage.has("cache_expiration") && storage["cache_expiration"].integer() == 0;
 }
 }
 
@@ -190,6 +209,8 @@ bool QuarkOpenListProvider::ConfigureStorage() {
     auto list = RequestUrl("GET", m_config.baseUrl + "/api/admin/storage/list?page=1&per_page=200");
     int existingId = 0;
     bool healthy = false;
+    bool cachePolicyNeedsUpdate = false;
+    std::string existingCookie;
     if (list.status == 200) {
         auto j = Json::Parse(list.body);
         auto& content = j["data"]["content"];
@@ -198,11 +219,20 @@ bool QuarkOpenListProvider::ConfigureStorage() {
             if (it["driver"].str() == "Quark" && it["mount_path"].str() == m_config.mountPath) {
                 existingId = (int)it["id"].integer();
                 healthy = it["status"].str() == "work";
+                cachePolicyNeedsUpdate = StorageCachePolicyNeedsUpdate(it);
+                existingCookie = StorageCookie(it);
                 break;
             }
         }
     }
-    if (existingId && healthy && !m_config.forceStorageUpdate) return true;
+    if (existingId && healthy && !m_config.forceStorageUpdate && !cachePolicyNeedsUpdate) {
+        if (!existingCookie.empty() && existingCookie != m_config.cookie) {
+            m_config.cookie = existingCookie;
+            SaveConfig();
+            LOG("[Quark] Synced refreshed OpenList cookie back to config");
+        }
+        return true;
+    }
 
     auto addition = Obj({{"cookie", Json::String(m_config.cookie)}, {"root_folder_id", Json::String("0")},
                          {"order_by", Json::String("name")}, {"order_direction", Json::String("asc")},
@@ -219,6 +249,10 @@ bool QuarkOpenListProvider::ConfigureStorage() {
     if (existingId) payload.objVal["id"] = Json::Number(existingId);
     auto r = ApiRequest("POST", existingId ? "/api/admin/storage/update" : "/api/admin/storage/create", payload);
     if (r.status != 200 || !HasOpenListSuccess(Json::Parse(r.body))) { LOG("[Quark] Storage configure failed HTTP %d", r.status); return false; }
+    if (m_config.forceStorageUpdate) {
+        m_config.forceStorageUpdate = false;
+        SaveConfig();
+    }
     return true;
 }
 
@@ -227,7 +261,11 @@ bool QuarkOpenListProvider::ValidateRelativePath(const std::string& relPath) con
     size_t p = 0; while (p <= relPath.size()) { size_t s = relPath.find('/', p); auto seg = s == std::string::npos ? relPath.substr(p) : relPath.substr(p, s - p); if (seg.empty() || seg == "." || seg == "..") return false; if (s == std::string::npos) break; p = s + 1; }
     return true;
 }
-std::string QuarkOpenListProvider::RemotePathFor(const std::string& relPath) const { return ValidateRelativePath(relPath) ? m_config.remoteRootPath + "/" + relPath : std::string(); }
+std::string QuarkOpenListProvider::RemotePathFor(const std::string& relPath) const {
+    std::string normalized = relPath;
+    while (!normalized.empty() && normalized.back() == '/') normalized.pop_back();
+    return ValidateRelativePath(normalized) ? m_config.remoteRootPath + "/" + normalized : std::string();
+}
 std::string QuarkOpenListProvider::ParentPath(const std::string& p) const { auto s = p.find_last_of('/'); return s == std::string::npos ? std::string() : p.substr(0, s); }
 std::string QuarkOpenListProvider::LeafName(const std::string& p) const { auto s = p.find_last_of('/'); return s == std::string::npos ? p : p.substr(s + 1); }
 
@@ -246,6 +284,33 @@ bool QuarkOpenListProvider::RemoveRemote(const std::string& remotePath) {
     if (r.status != 200) return false;
     auto j = Json::Parse(r.body);
     return HasOpenListSuccess(j) || IsOpenListMissing(j);
+}
+
+void QuarkOpenListProvider::CleanupLegacyHealthFiles() {
+    std::vector<FileInfo> files;
+    bool complete = false;
+    if (!ListRecursive(m_config.remoteRootPath, "", files, &complete) || !complete) return;
+    for (const auto& file : files) {
+        static constexpr const char* prefix = "cloudredirect-health-";
+        static constexpr const char* suffix = ".json";
+        std::string name = file.path;
+        if (name == ".healthcheck/cloudredirect-health.json") {
+            auto remote = RemotePathFor(name);
+            if (!remote.empty()) RemoveRemote(remote);
+            continue;
+        }
+
+        if (name.rfind(".healthcheck/" + std::string(prefix), 0) == 0) {
+            name = name.substr(std::char_traits<char>::length(".healthcheck/"));
+        } else if (name.rfind(prefix, 0) != 0) {
+            continue;
+        }
+        if (name.size() < std::char_traits<char>::length(prefix) + std::char_traits<char>::length(suffix)) continue;
+        if (name.compare(name.size() - std::char_traits<char>::length(suffix),
+                         std::char_traits<char>::length(suffix), suffix) != 0) continue;
+        auto remote = RemotePathFor(file.path);
+        if (!remote.empty()) RemoveRemote(remote);
+    }
 }
 
 bool QuarkOpenListProvider::Upload(const std::string& path, const uint8_t* data, size_t len) {
@@ -331,6 +396,22 @@ ICloudProvider::ExistsStatus QuarkOpenListProvider::CheckExists(const std::strin
 
 bool QuarkOpenListProvider::ListRecursive(const std::string& remotePath, const std::string& relPrefix, std::vector<FileInfo>& outFiles, bool* outComplete, int depth) {
     if (depth > 32) { if (outComplete) *outComplete = false; return false; }
+    auto meta = ApiRequest("POST", "/api/fs/get", Obj({{"path", Json::String(remotePath)}, {"password", Json::String("")}, {"refresh", Json::Value{Json::Type::Bool, true}}}));
+    if (meta.status == 404) return true;
+    if (meta.status != 200) return false;
+    auto metaJson = Json::Parse(meta.body);
+    if (!HasOpenListSuccess(metaJson)) return IsOpenListMissing(metaJson);
+    auto& metaData = metaJson["data"];
+    if (!metaData["is_dir"].boolean()) {
+        if (!relPrefix.empty()) {
+            FileInfo fi;
+            fi.path = relPrefix;
+            fi.size = (uint64_t)metaData["size"].integer();
+            outFiles.push_back(std::move(fi));
+        }
+        return true;
+    }
+
     constexpr int perPage = 500;
     for (int page = 1; page <= 1000; ++page) {
         auto r=ApiRequest("POST","/api/fs/list",Obj({{"path",Json::String(remotePath)},{"password",Json::String("")},{"page",Json::Number(page)},{"per_page",Json::Number(perPage)},{"refresh",Json::Value{Json::Type::Bool,true}}}));
@@ -350,20 +431,18 @@ bool QuarkOpenListProvider::ListRecursive(const std::string& remotePath, const s
 std::vector<ICloudProvider::FileInfo> QuarkOpenListProvider::List(const std::string& prefix) { std::vector<FileInfo> f; ListChecked(prefix,f); return f; }
 bool QuarkOpenListProvider::ListChecked(const std::string& prefix, std::vector<FileInfo>& outFiles, bool* outComplete) {
     std::lock_guard<std::mutex> lock(m_mutex); outFiles.clear(); if (outComplete) *outComplete=false;
-    std::string remote = prefix.empty()?m_config.remoteRootPath:RemotePathFor(prefix); if (remote.empty()) return false;
-    bool ok=ListRecursive(remote,prefix,outFiles,outComplete); if (ok && outComplete) *outComplete=true; return ok;
+    std::string normalizedPrefix = prefix;
+    while (!normalizedPrefix.empty() && normalizedPrefix.back() == '/') normalizedPrefix.pop_back();
+    std::string remote = normalizedPrefix.empty()?m_config.remoteRootPath:RemotePathFor(normalizedPrefix); if (remote.empty()) return false;
+    bool ok=ListRecursive(remote,normalizedPrefix,outFiles,outComplete); if (ok && outComplete) *outComplete=true; return ok;
 }
 
 bool QuarkOpenListProvider::HealthCheck() {
-    std::string p = m_config.remoteRootPath + "/.healthcheck/cloudredirect-health.json";
-    std::string body = "{\"type\":\"cloudredirect-quark-health-check\"}";
-    if (!Mkdir(ParentPath(p))) return false;
-    auto up=RequestUrl("PUT",m_config.baseUrl+"/api/fs/put",body,{"File-Path: "+UrlEncode(p,false),"Content-Type: application/json"});
-    if (up.status != 200 || !HasOpenListSuccess(Json::Parse(up.body))) return false;
-    std::vector<uint8_t> downloaded;
-    bool ok = DownloadRemotePath(p, downloaded);
-    RemoveRemote(p);
-    return ok && std::string(downloaded.begin(), downloaded.end()).find("cloudredirect-quark-health-check") != std::string::npos;
+    if (!EnsureRemoteRoot()) return false;
+    auto r = ApiRequest("POST", "/api/fs/get", Obj({{"path", Json::String(m_config.remoteRootPath)}, {"password", Json::String("")}, {"refresh", Json::Value{Json::Type::Bool, true}}}));
+    if (r.status != 200) return false;
+    auto j = Json::Parse(r.body);
+    return HasOpenListSuccess(j) && j["data"]["is_dir"].boolean();
 }
 
 bool QuarkOpenListProvider::Init(const std::string& configPath) {
@@ -371,6 +450,7 @@ bool QuarkOpenListProvider::Init(const std::string& configPath) {
     if (!LoadConfig(configPath) || !EnsureDataDir() || !SetAdminPassword()) return false;
     m_transport = CreateHttpTransport("[Quark]"); if (!m_transport || !m_transport->Init()) return false;
     if (!StartOpenList() || !LoginWithRetry() || !ConfigureStorage() || !EnsureRemoteRoot()) return false;
+    CleanupLegacyHealthFiles();
     m_authenticated = HealthCheck(); m_initialized = true; LOG("[Quark] Initialized authenticated=%s", m_authenticated?"true":"false"); return true;
 }
 void QuarkOpenListProvider::Shutdown() {

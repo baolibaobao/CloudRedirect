@@ -25,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cctype>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -771,7 +772,8 @@ static bool EnsureVdfSectionPath(std::string& vdfContent,
 // with persiststate=deleted. Add-only, atomic-write, stat-before/after.
 static bool EnsureAndMarkRemotecacheRepaired(
         uint32_t accountId, uint32_t appId,
-        const std::vector<RemotecacheCandidate>& candidates) {
+        const std::vector<RemotecacheCandidate>& candidates,
+        bool forceDiskCheck = false) {
     const uint64_t appKey = MakeAppAccountKey(accountId, appId);
 
     // Mark attempted on the empty path; HandleDeleteFile distinguishes
@@ -782,7 +784,7 @@ static bool EnsureAndMarkRemotecacheRepaired(
         return true;
     }
 
-    {
+    if (!forceDiskCheck) {
         std::lock_guard<std::mutex> lock(g_remotecacheRepairMutex);
         auto it = g_remotecachePlantedRows.find(appKey);
         if (it != g_remotecachePlantedRows.end()) {
@@ -873,6 +875,202 @@ static bool EnsureAndMarkRemotecacheRepaired(
     auto& planted = g_remotecachePlantedRows[appKey];
     for (const auto& c : candidates) planted.insert(c.cleanName);
     return true;
+}
+
+static void ScheduleDeferredRemotecacheRepair(
+        uint32_t accountId, uint32_t appId,
+        const std::vector<RemotecacheCandidate>& candidates) {
+    if (candidates.empty()) return;
+
+    std::thread([accountId, appId, candidates]() {
+        constexpr int delaysMs[] = { 1500, 5000, 12000 };
+        for (int delayMs : delaysMs) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            if (EnsureAndMarkRemotecacheRepaired(accountId, appId, candidates, true)) {
+                LOG("[NS-RC] Deferred remotecache repair verified for app %u after %dms",
+                    appId, delayMs);
+            }
+        }
+    }).detach();
+}
+
+static bool MarkSteamRemotecacheSynced(uint32_t accountId, uint32_t appId,
+                                       uint64_t changeNumber) {
+    std::string steamPath = CloudIntercept::GetSteamPath();
+    if (steamPath.empty()) return false;
+
+#ifdef _WIN32
+    std::string vdfPath = steamPath + "userdata\\" + std::to_string(accountId)
+        + "\\" + std::to_string(appId) + "\\remotecache.vdf";
+#else
+    std::string vdfPath = steamPath + "userdata/" + std::to_string(accountId)
+        + "/" + std::to_string(appId) + "/remotecache.vdf";
+#endif
+
+    auto ioMutex = AcquireRemotecacheRepairIoMutex(MakeAppAccountKey(accountId, appId));
+    std::lock_guard<std::mutex> ioLock(*ioMutex);
+
+    auto pathW = FileUtil::Utf8ToPath(vdfPath);
+    std::ifstream in(pathW);
+    if (!in.is_open()) {
+        LOG("[NS-RC] Cannot mark remotecache synced for app %u: missing %s",
+            appId, vdfPath.c_str());
+        return false;
+    }
+    std::string content((std::istreambuf_iterator<char>(in)), {});
+    in.close();
+
+    std::string updated;
+    if (!MarkRemotecacheSynced(content, appId, changeNumber, updated)) {
+        LOG("[NS-RC] Cannot mark remotecache synced for app %u: section update failed",
+            appId);
+        return false;
+    }
+    if (updated == content) {
+        LOG("[NS-RC] remotecache.vdf already marked synced for app %u CN=%llu",
+            appId, (unsigned long long)changeNumber);
+        return true;
+    }
+    if (!FileUtil::AtomicWriteText(vdfPath, updated)) {
+        LOG("[NS-RC] Failed to mark remotecache synced for app %u (%s)",
+            appId, vdfPath.c_str());
+        return false;
+    }
+    LOG("[NS-RC] Marked remotecache.vdf synced for app %u CN=%llu",
+        appId, (unsigned long long)changeNumber);
+    return true;
+}
+
+static std::filesystem::path SteamUserAppPath(uint32_t accountId, uint32_t appId) {
+    std::string steamPath = CloudIntercept::GetSteamPath();
+    if (steamPath.empty()) return {};
+
+#ifdef _WIN32
+    return FileUtil::Utf8ToPath(steamPath + "userdata\\" + std::to_string(accountId)
+        + "\\" + std::to_string(appId));
+#else
+    return FileUtil::Utf8ToPath(steamPath + "userdata/" + std::to_string(accountId)
+        + "/" + std::to_string(appId));
+#endif
+}
+
+static std::filesystem::path RelativeRemotePathToDiskPath(
+    const std::filesystem::path& remoteRoot,
+    const std::string& relativePath) {
+    std::filesystem::path result = remoteRoot;
+    size_t pos = 0;
+    while (pos <= relativePath.size()) {
+        size_t slash = relativePath.find('/', pos);
+        std::string part = slash == std::string::npos
+            ? relativePath.substr(pos)
+            : relativePath.substr(pos, slash - pos);
+        if (!part.empty() && part != "." && part != "..") {
+            result /= FileUtil::Utf8ToPath(part);
+        }
+        if (slash == std::string::npos) break;
+        pos = slash + 1;
+    }
+    return result;
+}
+
+static void BackupAndRemoveSteamRemoteFile(
+    const std::filesystem::path& remoteRoot,
+    const std::filesystem::path& backupRoot,
+    const std::filesystem::path& filePath,
+    size_t& removedCount) {
+    std::error_code ec;
+    auto rel = std::filesystem::relative(filePath, remoteRoot, ec);
+    if (ec || rel.empty()) return;
+
+    auto backupPath = backupRoot / rel;
+    std::filesystem::create_directories(backupPath.parent_path(), ec);
+    ec.clear();
+    std::filesystem::rename(filePath, backupPath, ec);
+    if (ec) {
+        ec.clear();
+        std::filesystem::copy_file(filePath, backupPath,
+            std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec) return;
+        ec.clear();
+        std::filesystem::remove(filePath, ec);
+    }
+    if (!ec) ++removedCount;
+}
+
+static void PruneSteamRemoteCacheToManifest(uint32_t accountId, uint32_t appId,
+                                            const CloudStorage::Manifest& manifest) {
+    if (manifest.empty()) return;
+
+    auto appPath = SteamUserAppPath(accountId, appId);
+    if (appPath.empty()) return;
+    auto remoteRoot = appPath / "remote";
+    std::error_code ec;
+    if (!std::filesystem::exists(remoteRoot, ec) || !std::filesystem::is_directory(remoteRoot, ec)) {
+        return;
+    }
+
+    std::unordered_set<std::string> keepCanonical;
+    std::unordered_set<std::string> keepLower;
+    for (const auto& [name, entry] : manifest) {
+        if (IsReservedBlobFilename(name)) continue;
+        std::string normalized = name;
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        keepCanonical.insert(normalized);
+        std::string lower = normalized;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        keepLower.insert(lower);
+    }
+    if (keepCanonical.empty()) return;
+
+    auto backupRoot = appPath / "cloud_redirect_backup"
+        / ("remote-cache-" + std::to_string(std::time(nullptr)));
+
+    size_t totalFiles = 0;
+    size_t removedFiles = 0;
+    for (std::filesystem::recursive_directory_iterator it(remoteRoot,
+             std::filesystem::directory_options::skip_permission_denied, ec), end;
+         !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        ++totalFiles;
+        auto relPath = std::filesystem::relative(it->path(), remoteRoot, ec);
+        if (ec) continue;
+        std::string rel = FileUtil::PathToUtf8(relPath);
+        std::replace(rel.begin(), rel.end(), '\\', '/');
+        std::string lower = rel;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (keepLower.count(lower) == 0) {
+            BackupAndRemoveSteamRemoteFile(remoteRoot, backupRoot, it->path(), removedFiles);
+        }
+    }
+
+    for (const auto& name : keepCanonical) {
+        auto expectedPath = RelativeRemotePathToDiskPath(remoteRoot, name);
+        if (!std::filesystem::exists(expectedPath, ec)) {
+            continue;
+        }
+    }
+
+    for (int pass = 0; pass < 8; ++pass) {
+        bool removedDir = false;
+        for (std::filesystem::recursive_directory_iterator it(remoteRoot,
+                 std::filesystem::directory_options::skip_permission_denied, ec), end;
+             !ec && it != end; it.increment(ec)) {
+            if (!it->is_directory(ec)) continue;
+            auto path = it->path();
+            if (std::filesystem::is_empty(path, ec)) {
+                std::filesystem::remove(path, ec);
+                removedDir = true;
+            }
+        }
+        if (!removedDir) break;
+    }
+
+    if (removedFiles > 0) {
+        LOG("[NS-RC] Pruned Steam remote cache for app %u: removed %zu/%zu extra file(s), backup=%s",
+            appId, removedFiles, totalFiles, FileUtil::PathToUtf8(backupRoot).c_str());
+    }
 }
 
 
@@ -1138,55 +1336,6 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     EnsureAppQuotaInjected(accountId, appId, nullptr);
     EnsureSaveFilesInjected(appId);
 
-    // Fast path: probe CN if full manifest already sent this session.
-    {
-        const uint64_t cacheKey = MakeAppAccountKey(accountId, appId);
-        bool repeatCall = false;
-        uint64_t cachedCN = 0;
-        uint64_t cachedBuildId = 0;
-        {
-            std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-            if (g_fullManifestSentApps.count(cacheKey) > 0) {
-                repeatCall = true;
-                cachedCN = GetCachedCloudCN(accountId, appId);
-                cachedBuildId = GetCachedAppBuildIdHwm(accountId, appId);
-            }
-        }
-        if (repeatCall) {
-            // CN probe; on change, invalidate cache and fall through to full fetch.
-            bool probeNeeded = CloudStorage::IsCloudActive() && cachedCN > 0;
-            uint64_t remoteCN = probeNeeded
-                ? CloudStorage::FetchCloudCN(accountId, appId) : cachedCN;
-            if (probeNeeded && remoteCN == 0) {
-                // Probe failed; invalidate cache and fall through to full fetch.
-                LOG("[NS-CL] GetAppFileChangelist app=%u: CN probe failed, invalidating cache",
-                    appId);
-                std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-                g_fullManifestSentApps.erase(cacheKey);
-                g_cachedCloudCN.erase(cacheKey);
-                g_cachedAppBuildIdHwm.erase(cacheKey);
-                // Fall through to full fetch below
-            } else if (remoteCN != cachedCN) {
-                LOG("[NS-CL] GetAppFileChangelist app=%u: remote CN=%llu differs from cached CN=%llu, invalidating cache",
-                    appId, remoteCN, cachedCN);
-                std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-                g_fullManifestSentApps.erase(cacheKey);
-                g_cachedCloudCN.erase(cacheKey);
-                g_cachedAppBuildIdHwm.erase(cacheKey);
-                // Fall through to full fetch below
-            } else {
-                LOG("[NS-CL] GetAppFileChangelist app=%u: repeat call, CN unchanged (%llu), returning cached empty delta",
-                    appId, cachedCN);
-                PB::Writer body;
-                body.WriteVarint(1, cachedCN);
-                body.WriteVarint(3, 1); // is_only_delta = 1
-                body.WriteString(5, GetMachineName());
-                body.WriteVarint(6, cachedBuildId);
-                return body;
-            }
-        }
-    }
-
     // Track whether we fetched fresh manifest from cloud this call
     CloudStorage::Manifest cloudManifest;
     std::unordered_map<std::string, CloudStorage::FileEntry> cloudFileEntries; // full per-file state from cloud
@@ -1261,6 +1410,10 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
             appId, cloudCN, cloudManifest.size());
     }
 
+    if (haveCloudManifest && !cloudManifest.empty()) {
+        PruneSteamRemoteCacheToManifest(accountId, appId, cloudManifest);
+    }
+
     // Async AutoCloud bootstrap; set is_only_delta=1 if active.
     SetRpcCrashContext("GetChangelist:bootstrap", "Cloud.GetAppFileChangelist#1", appId);
     AutoCloudBootstrap::Bootstrap(accountId, appId, /*wait=*/false);
@@ -1319,6 +1472,7 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     std::vector<LocalStorage::FileEntry> files;
     uint64_t serverChangeNumber = 0;  // Initialize to prevent UB in edge cases
     bool responseIsDelta = true;
+    bool suppressSameCnFullManifestAfterRepair = false;
 
     if (haveCloudManifest && cloudManifest.empty() && cloudCN == 0) {
         // New app at CN=0 -- return empty authoritative inventory
@@ -1349,47 +1503,30 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
             LOG("[NS-CL] GetAppFileChangelist app=%u delta clientCN=%llu serverCN=%llu (%zu changed)",
                 appId, clientChangeNumber, cloudCN, files.size());
         } else {
-            // No delta. First call: full manifest (populates root tokens).
-            // Subsequent calls: empty delta (avoids stale SHA/timestamp conflicts).
-            const uint64_t cacheKey = MakeAppAccountKey(accountId, appId);
-            bool alreadySentFull;
-            {
-                std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-                alreadySentFull = g_fullManifestSentApps.count(cacheKey) > 0;
-            }
-
             serverChangeNumber = cloudCN;
+            responseIsDelta = false;
+            suppressSameCnFullManifestAfterRepair = (clientChangeNumber == cloudCN);
 
-            if (alreadySentFull) {
-                // Subsequent call: empty delta.
-                responseIsDelta = true;
-                LOG("[NS-CL] GetAppFileChangelist app=%u: already sent full manifest this session, returning empty delta at CN=%llu",
-                    appId, cloudCN);
-            } else {
-                // First call: full manifest. Use cloud timestamp so subsequent
-                // compares see the same remotetime (avoids false conflicts).
-                responseIsDelta = false;
-
-                for (const auto& [filename, entry] : cloudManifest) {
-                    if (IsReservedBlobFilename(filename)) continue;
-                    LocalStorage::FileEntry fe;
-                    fe.filename = filename;
-                    fe.sha = entry.sha;
-                    fe.timestamp = entry.timestamp;
-                    fe.rawSize = entry.size;
-                    fe.deleted = false;
-                    files.push_back(std::move(fe));
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-                    g_fullManifestSentApps.insert(cacheKey);
-                    g_cachedCloudCN[cacheKey] = cloudCN;
-                    g_cachedAppBuildIdHwm[cacheKey] = appBuildIdHwm;
-                }
-                LOG("[NS-CL] GetAppFileChangelist app=%u: returning full manifest (%zu files) at CN=%llu (clientCN=%llu)",
-                    appId, files.size(), cloudCN, clientChangeNumber);
+            for (const auto& [filename, entry] : cloudManifest) {
+                if (IsReservedBlobFilename(filename)) continue;
+                LocalStorage::FileEntry fe;
+                fe.filename = filename;
+                fe.sha = entry.sha;
+                fe.timestamp = entry.timestamp;
+                fe.rawSize = entry.size;
+                fe.deleted = false;
+                files.push_back(std::move(fe));
             }
+
+            {
+                const uint64_t cacheKey = MakeAppAccountKey(accountId, appId);
+                std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
+                g_fullManifestSentApps.insert(cacheKey);
+                g_cachedCloudCN[cacheKey] = cloudCN;
+                g_cachedAppBuildIdHwm[cacheKey] = appBuildIdHwm;
+            }
+            LOG("[NS-CL] GetAppFileChangelist app=%u: returning full manifest (%zu files) at CN=%llu (clientCN=%llu, no delta)",
+                appId, files.size(), cloudCN, clientChangeNumber);
         }
     } else {
         // No cloud manifest -- serve local files as delta (don't trigger reconcile-deletes)
@@ -1574,7 +1711,11 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
                 fe.filename.c_str(), fileToken.c_str());
         }
 
-        std::string fullPrefix = fileToken + dirPrefix;
+        // The changelist wire prefix is the cloud-relative directory, not the
+        // AutoCloud root token. Steam already resolves the root from app UFS
+        // rules/remotecache; advertising "%WinAppDataRoaming%foo/" here makes
+        // the AC Launch download build-list path stall before FileDownload.
+        std::string fullPrefix = dirPrefix;
 
         uint32_t prefixIdx;
         auto it = prefixMap.find(fullPrefix);
@@ -1587,14 +1728,33 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
         }
 
         prepared.push_back({leaf, prefixIdx, &fe});
-        remotecacheCandidates.push_back(
-            { fe.filename, fileToken, fe.sha, fe.timestamp, fe.rawSize });
+        if (!fe.deleted) {
+            remotecacheCandidates.push_back(
+                { fe.filename, fileToken, fe.sha, fe.timestamp, fe.rawSize });
+        }
         LOG("[NS-CL]   file: %s (prefix[%u]=%s, size=%llu, ts=%llu)",
             fe.filename.c_str(), prefixIdx, fullPrefix.c_str(), fe.rawSize, fe.timestamp);
     }
 
-    // Don't pre-seed remotecache.vdf; let Steam manage it via GetChangelist diffs.
-    // Pre-seeding caused conflicts (Steam interpreted it as "local changed").
+    // Steam can rewrite remotecache.vdf to just ChangeNumber/OSType during
+    // early eval before the redirect DLL is fully initialized. When that
+    // happens the subsequent full manifest is valid, but Steam's AutoCloud
+    // build-list path times out because the local cache table lacks rows for
+    // files we advertise. Seed only missing, already-synced rows for a full
+    // authoritative response; delta responses remain Steam-owned.
+    if (!responseIsDelta && !remotecacheCandidates.empty()) {
+        EnsureAndMarkRemotecacheRepaired(accountId, appId, remotecacheCandidates);
+        ScheduleDeferredRemotecacheRepair(accountId, appId, remotecacheCandidates);
+    }
+
+    if (suppressSameCnFullManifestAfterRepair) {
+        LOG("[NS-CL] GetAppFileChangelist app=%u: client CN matches server CN=%llu; remotecache repaired, returning empty delta",
+            appId, serverChangeNumber);
+        prepared.clear();
+        prefixList.clear();
+        prefixMap.clear();
+        responseIsDelta = true;
+    }
 
     SetRpcCrashContext("GetChangelist:write-response", "Cloud.GetAppFileChangelist#1", appId);
     PB::Writer body;
@@ -2259,7 +2419,8 @@ RpcResult HandleBeginBatch(uint32_t appId, const std::vector<PB::Field>& reqBody
         if (f.fieldNum == 6 && f.wireType == PB::Varint) appBuildId = f.varintVal;
     }
 
-    BatchTracker_Begin(accountId, appId, batchId, assignedCN, appBuildId);
+    BatchTracker_Begin(accountId, appId, batchId, assignedCN, appBuildId,
+        static_cast<uint32_t>(uploadCount), static_cast<uint32_t>(deleteCount));
 
     PB::Writer body = CloudRpcUtils::BuildBeginBatchResponseBody(batchId, assignedCN);
 
@@ -2477,16 +2638,6 @@ RpcResult HandleCompleteBatch(uint32_t appId, const std::vector<PB::Field>& reqB
         ClearBatchCanonicalTokens(accountId, appId);
         return PB::Writer();
     }
-    if (completeInfo.hasResult && completeInfo.result != 1) {
-        LOG("[NS] CompleteBatch app=%u batch=%llu reported Steam upload result %u; refusing CN advance",
-            appId, (unsigned long long)batch.batchId, completeInfo.result);
-        PendingOpsJournal::RecordUploadBatchInterrupted(accountId, appId);
-        BatchTracker_Clear(accountId, appId, batch.batchId);
-        ClearBatchCanonicalTokens(accountId, appId);
-        ClearFileTokensDirty(accountId, appId);
-        return PB::Writer();
-    }
-
     // Drain deferred file-token persists for this app only.
     {
         uint64_t key = MakeAppAccountKey(accountId, appId);
@@ -2501,6 +2652,43 @@ RpcResult HandleCompleteBatch(uint32_t appId, const std::vector<PB::Field>& reqB
     }
     std::vector<std::string> uploads(batch.uploads.begin(), batch.uploads.end());
     std::vector<std::string> deletes(batch.deletes.begin(), batch.deletes.end());
+    if (completeInfo.hasResult && completeInfo.result != 1 && uploads.empty() && deletes.empty()) {
+        LOG("[NS] CompleteBatch app=%u batch=%llu reported Steam upload result %u with no committed local work (requested uploads=%u deletes=%u)",
+            appId, (unsigned long long)batch.batchId, completeInfo.result,
+            batch.requestedUploads, batch.requestedDeletes);
+        if (batch.requestedUploads > 0) {
+            LOG("[NS] CompleteBatch app=%u: Steam did not PUT requested upload; falling back to AutoCloud disk refresh",
+                appId);
+            PendingOpsJournal::RecordUploadBatchEnd(accountId, appId);
+            BatchTracker_Clear(accountId, appId, batch.batchId);
+            ClearBatchCanonicalTokens(accountId, appId);
+            ClearFileTokensDirty(accountId, appId);
+            AutoCloudBootstrap::ResetAttempted(accountId, appId);
+            AutoCloudBootstrap::Bootstrap(accountId, appId, /*wait=*/true);
+            uint64_t fallbackCN = LocalStorage::GetChangeNumber(accountId, appId);
+            if (fallbackCN >= batch.assignedCN) {
+                MarkSteamRemotecacheSynced(accountId, appId, fallbackCN);
+                SetCloudSyncState(appId, "synchronized");
+                LOG("[NS] CompleteBatch app=%u: AutoCloud fallback published CN=%llu after Steam upload timeout",
+                    appId, (unsigned long long)fallbackCN);
+            } else {
+                LOG("[NS] CompleteBatch app=%u: AutoCloud fallback did not advance CN (local=%llu batch=%llu)",
+                    appId, (unsigned long long)fallbackCN, (unsigned long long)batch.assignedCN);
+            }
+            return PB::Writer();
+        }
+        LOG("[NS] CompleteBatch app=%u batch=%llu has no requested upload fallback; refusing CN advance",
+            appId, (unsigned long long)batch.batchId);
+        PendingOpsJournal::RecordUploadBatchInterrupted(accountId, appId);
+        BatchTracker_Clear(accountId, appId, batch.batchId);
+        ClearBatchCanonicalTokens(accountId, appId);
+        ClearFileTokensDirty(accountId, appId);
+        return PB::Writer();
+    }
+    if (completeInfo.hasResult && completeInfo.result != 1) {
+        LOG("[NS] CompleteBatch app=%u batch=%llu reported Steam upload result %u after %zu committed upload(s), %zu delete(s); continuing local commit",
+            appId, (unsigned long long)batch.batchId, completeInfo.result, uploads.size(), deletes.size());
+    }
     if (!CloudStorage::PromoteStagedBatchForCommit(accountId, appId,
             batch.batchId, uploads, deletes)) {
         LOG("[NS] CompleteBatch app=%u refused CN advance: staged promotion failed",
@@ -2630,6 +2818,8 @@ RpcResult HandleCompleteBatch(uint32_t appId, const std::vector<PB::Field>& reqB
 
     BatchTracker_Clear(accountId, appId, batch.batchId);
     PendingOpsJournal::RecordUploadBatchEnd(accountId, appId);
+    MarkSteamRemotecacheSynced(accountId, appId, newCN);
+    SetCloudSyncState(appId, "synchronized");
     LOG("[NS] CompleteBatch app=%u CN=%llu (state published atomically)", appId, newCN);
 
     ClearBatchCanonicalTokens(accountId, appId);

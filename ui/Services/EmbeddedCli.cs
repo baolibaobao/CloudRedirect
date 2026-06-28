@@ -21,7 +21,7 @@ internal static class EmbeddedCli
         if (cliStream == null || dllStream == null)
             return null;
 
-        string baseDir = Path.Combine(Path.GetTempPath(), "CloudRedirect", ComputeResourceHash(cliStream));
+        string baseDir = Path.Combine(Path.GetTempPath(), "CloudRedirect", ComputeResourceHash(cliStream, dllStream));
         Directory.CreateDirectory(baseDir);
 
         string exePath = Path.Combine(baseDir, "cloud_redirect_cli.exe");
@@ -46,11 +46,19 @@ internal static class EmbeddedCli
         return exePath;
     }
 
-    private static string ComputeResourceHash(Stream stream)
+    private static string ComputeResourceHash(params Stream[] streams)
     {
-        stream.Position = 0;
         using var sha = System.Security.Cryptography.SHA256.Create();
-        var hash = sha.ComputeHash(stream);
+        var buffer = new byte[81920];
+        foreach (var stream in streams)
+        {
+            stream.Position = 0;
+            int read;
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                sha.TransformBlock(buffer, 0, read, null, 0);
+        }
+        sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+        var hash = sha.Hash ?? [];
         return Convert.ToHexString(hash).Substring(0, 16);
     }
 }

@@ -37,4 +37,13 @@ bool UpdateRemotecacheChangeNumber(const std::string& original,
                                    uint64_t newChangeNumber,
                                    std::string& outUpdated);
 
+// Mark all file rows in an app section as synchronized and update ChangeNumber.
+// This is used after a local AutoCloud fallback has already uploaded/published
+// the same data, but Steam's own HTTP upload path timed out before it could
+// clean up remotecache.vdf.
+bool MarkRemotecacheSynced(const std::string& original,
+                           uint32_t appId,
+                           uint64_t newChangeNumber,
+                           std::string& outUpdated);
+
 } // namespace CloudIntercept

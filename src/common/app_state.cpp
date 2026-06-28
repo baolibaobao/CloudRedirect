@@ -7,7 +7,9 @@
 #include "log.h"
 #include "manifest_store.h"
 
+#include <chrono>
 #include <ctime>
+#include <thread>
 
 using CloudIntercept::IsReservedBlobFilename;
 
@@ -188,7 +190,17 @@ StateFetchResult FetchCloudState(uint32_t accountId, uint32_t appId) {
 
     std::string statePath = CloudMetadataPath(accountId, appId, kStateFilename);
     std::vector<uint8_t> data;
-    if (g_stateProvider->Download(statePath, data)) {
+    bool downloaded = false;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        if (g_stateProvider->Download(statePath, data)) {
+            downloaded = true;
+            break;
+        }
+        if (attempt < 3) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(350 * attempt));
+        }
+    }
+    if (downloaded) {
         if (data.size() > MAX_STATE_SIZE) {
             LOG("[AppState] FetchCloudState app %u: state file too large (%zu bytes)",
                 appId, data.size());
@@ -207,7 +219,12 @@ StateFetchResult FetchCloudState(uint32_t accountId, uint32_t appId) {
         return { StateFetchStatus::Ok, std::move(state), {} };
     }
 
-    auto existsStatus = g_stateProvider->CheckExists(statePath);
+    ICloudProvider::ExistsStatus existsStatus = ICloudProvider::ExistsStatus::Error;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        existsStatus = g_stateProvider->CheckExists(statePath);
+        if (existsStatus != ICloudProvider::ExistsStatus::Missing || attempt == 3) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(350 * attempt));
+    }
     if (existsStatus == ICloudProvider::ExistsStatus::Missing) {
         auto legacyResult = FetchCloudManifest(accountId, appId);
         uint64_t legacyCN = 0;

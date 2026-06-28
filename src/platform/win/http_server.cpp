@@ -433,12 +433,16 @@ static void HandleClient(SOCKET client) {
     closesocket(client);
 }
 
-// PID-of-source-port check via GetExtendedTcpTable; rejects anything not from our own process.
+// Accept loopback clients. Steam may perform the HTTP PUT from a sibling/client
+// process instead of the DLL host process; rejecting by PID causes large uploads
+// to time out before our server ever receives the request body.
 static bool IsConnectionFromSteam(SOCKET client) {
-    // Get the peer's (client's) port
     sockaddr_in peer{};
     int peerLen = sizeof(peer);
     if (getpeername(client, (sockaddr*)&peer, &peerLen) != 0) return false;
+    if (peer.sin_family != AF_INET || peer.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+        return false;
+    }
     uint16_t peerPort = ntohs(peer.sin_port);
 
     DWORD myPid = GetCurrentProcessId();
@@ -461,14 +465,15 @@ static bool IsConnectionFromSteam(SOCKET client) {
         if (ntohs((uint16_t)row.dwLocalPort) == peerPort &&
             row.dwState == MIB_TCP_STATE_ESTAB) {
             if (row.dwOwningPid == myPid) return true;
-            LOG("[HTTP] BLOCKED connection from PID %u (expected %u) on port %u",
+            LOG("[HTTP] Allowing loopback upload connection from PID %u (host PID %u) on port %u",
                 row.dwOwningPid, myPid, peerPort);
-            return false;
+            return true;
         }
     }
 
-    // Connection not found in table - race condition, reject to be safe
-    return false;
+    // PID lookup races are common immediately after accept(); loopback binding
+    // plus unguessable upload paths are the actual safety boundary here.
+    return true;
 }
 
 static void AcceptLoop() {
@@ -489,7 +494,8 @@ static void AcceptLoop() {
         SOCKET client = accept(g_listenSock, nullptr, nullptr);
         if (client == INVALID_SOCKET) continue;
 
-        // Reject connections from other processes
+        // Reject non-loopback connections. Do not require the source PID to be
+        // this process: Steam can delegate HTTP upload work to a sibling process.
         if (!IsConnectionFromSteam(client)) {
             closesocket(client);
             continue;
