@@ -10,13 +10,6 @@ namespace CloudRedirect.Pages;
 
 public partial class DashboardPage : Page
 {
-    private string? _steamPath;
-
-    public void HideDllUpdateBanner()
-    {
-        Dispatcher.Invoke(() => UpdateBanner.Visibility = Visibility.Collapsed);
-    }
-
     public DashboardPage()
     {
         InitializeComponent();
@@ -24,12 +17,6 @@ public partial class DashboardPage : Page
         {
             try { await LoadStatusAsync(); }
             catch { }
-
-            // Give the app-level update check time to finish, then hide the
-            // DLL banner if a full app update is available (avoids two banners).
-            await Task.Delay(3000);
-            if (Window.GetWindow(this) is MainWindow mw && mw.AppUpdateAvailable)
-                UpdateBanner.Visibility = Visibility.Collapsed;
         };
     }
 
@@ -74,8 +61,6 @@ public partial class DashboardPage : Page
             return (steamPath, dllExists, dllCurrent, config, appCount, tokenStatus, backend, ostStatus);
         });
 
-        _steamPath = data.steamPath;
-
         // Update UI on dispatcher thread
         SteamStatus.Text = data.steamPath ?? S.Get("Dashboard_NotFound");
 
@@ -88,9 +73,8 @@ public partial class DashboardPage : Page
             }
             else if (data.dllCurrent == false)
             {
-                DllStatus.Text = S.Get("Dashboard_DllInstalledUpdateAvailable");
+                DllStatus.Text = S.Get("Dashboard_DllInstalled");
                 DllIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ArrowSync24;
-                UpdateBanner.Visibility = Visibility.Visible;
             }
             else
             {
@@ -330,94 +314,4 @@ public partial class DashboardPage : Page
         }
     }
 
-    private async void UpdateDll_Click(object sender, RoutedEventArgs e)
-    {
-        if (_steamPath == null) return;
-
-        UpdateBanner.Visibility = Visibility.Collapsed;
-
-        try
-        {
-            // Shut down Steam if it's running
-            var steamRunning = await Task.Run(() =>
-            {
-                var procs = Process.GetProcessesByName("steam");
-                bool running = procs.Length > 0;
-                foreach (var p in procs) p.Dispose();
-                return running;
-            });
-
-            if (steamRunning)
-            {
-                DllStatus.Text = S.Get("Dashboard_ClosingSteam");
-
-                await Task.Run(() =>
-                {
-                    var steamExe = Path.Combine(_steamPath, "steam.exe");
-                    if (File.Exists(steamExe))
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = steamExe,
-                            Arguments = "-shutdown",
-                            UseShellExecute = true
-                        })?.Dispose();
-                    }
-
-                    // Wait up to 15s for graceful exit
-                    for (int i = 0; i < 30; i++)
-                    {
-                        System.Threading.Thread.Sleep(500);
-                        var check = Process.GetProcessesByName("steam");
-                        bool any = check.Length > 0;
-                        foreach (var p in check) p.Dispose();
-                        if (!any) return;
-                    }
-
-                    // Force-kill stragglers
-                    foreach (var p in Process.GetProcessesByName("steam"))
-                    {
-                        try { p.Kill(); } catch { }
-                        finally { p.Dispose(); }
-                    }
-                });
-            }
-
-            DllStatus.Text = S.Get("Dashboard_Updating");
-
-            var destPath = Path.Combine(_steamPath, "cloud_redirect.dll");
-            var error = await Task.Run(() => Services.EmbeddedDll.DeployTo(destPath));
-
-            if (error != null)
-            {
-                DllStatus.Text = S.Get("Dashboard_UpdateFailed");
-                await Services.Dialog.ShowErrorAsync(S.Get("Common_UpdateFailed"), error);
-                UpdateBanner.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                DllStatus.Text = S.Get("Dashboard_DllInstalledUpdated");
-                DllIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.PlugConnected24;
-
-                if (steamRunning)
-                {
-                    var restart = await Services.Dialog.ConfirmAsync(S.Get("Dashboard_DllUpdatedTitle"),
-                        S.Get("Dashboard_DllUpdatedRestartPrompt"));
-                    if (restart)
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = Path.Combine(_steamPath, "steam.exe"),
-                            UseShellExecute = true
-                        })?.Dispose();
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            await Services.Dialog.ShowErrorAsync(S.Get("Common_Error"), S.Format("Dashboard_FailedUpdateDll", ex.Message));
-            UpdateBanner.Visibility = Visibility.Visible;
-        }
-    }
 }

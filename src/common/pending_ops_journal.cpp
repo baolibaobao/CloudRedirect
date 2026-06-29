@@ -264,7 +264,7 @@ void RecordUploadBatchEnd(uint32_t accountId, uint32_t appId) {
     std::lock_guard<std::mutex> lock(g_mutex);
     std::optional<Entry> currentSession;
     auto entries = LoadEntriesUnlocked(accountId, appId, &currentSession);
-    RemoveOperation(entries, Operation::UploadInProgress);
+    RemoveUploadOperations(entries);
     SaveStateUnlocked(accountId, appId, entries, currentSession);
 }
 
@@ -371,6 +371,19 @@ void ClearUploadPending(uint32_t accountId, uint32_t appId) {
     auto entries = LoadEntriesUnlocked(accountId, appId, &currentSession);
     RemoveOperation(entries, Operation::UploadPending);
     SaveStateUnlocked(accountId, appId, entries, currentSession);
+}
+
+bool ClearUploadOperations(uint32_t accountId, uint32_t appId) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    std::optional<Entry> currentSession;
+    auto entries = LoadEntriesUnlocked(accountId, appId, &currentSession);
+    size_t before = entries.size();
+    RemoveUploadOperations(entries);
+    bool changed = entries.size() != before;
+    if (changed) {
+        SaveStateUnlocked(accountId, appId, entries, currentSession);
+    }
+    return changed;
 }
 
 void ClearPending(uint32_t accountId, uint32_t appId) {

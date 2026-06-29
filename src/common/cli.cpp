@@ -687,7 +687,10 @@ std::string CmdPublishFullManifest(const std::string& provider, const std::strin
     PendingOpsJournal::Init(storageRoot);
     CloudStorage::Init(cloudRoot, std::move(prov));
 
-    CloudStorage::Manifest localManifest = CloudStorage::BuildManifestFromLocalBlobs(parsedAccountId, parsedAppId);
+    CloudStorage::Manifest localManifest = CloudStorage::LoadLocalManifest(parsedAccountId, parsedAppId);
+    if (localManifest.empty()) {
+        localManifest = CloudStorage::BuildManifestFromLocalBlobs(parsedAccountId, parsedAppId);
+    }
     CloudStorage::CloudAppState state;
     state.cn = LocalStorage::GetChangeNumber(parsedAccountId, parsedAppId);
     for (const auto& [name, me] : localManifest) {
@@ -697,14 +700,18 @@ std::string CmdPublishFullManifest(const std::string& provider, const std::strin
         fe.size = me.size;
         state.files[name] = std::move(fe);
     }
-    bool manifestOk = CloudStorage::PublishCloudState(parsedAccountId, parsedAppId, state);
+    bool promoted = CloudStorage::PromoteLocalManifestToCloud(parsedAccountId, parsedAppId,
+                                                              localManifest);
+    bool manifestOk = promoted &&
+        CloudStorage::PublishCloudState(parsedAccountId, parsedAppId, state);
     bool cnOk = manifestOk;  // CN is included in state file
     bool drained = CloudWorkQueue::DrainQueueForApp(parsedAccountId, parsedAppId);
 
     CloudStorage::Shutdown();
 
     return JsonObject({
-        {"success", JsonBool(manifestOk && cnOk && drained)},
+        {"success", JsonBool(promoted && manifestOk && cnOk && drained)},
+        {"blobs_promoted", JsonBool(promoted)},
         {"manifest_published", JsonBool(manifestOk)},
         {"cn_published", JsonBool(cnOk)},
         {"drained", JsonBool(drained)}

@@ -257,6 +257,7 @@ static uint64_t TraceUsec() {
 
 // Forward declarations
 static void InstallServiceMethodHook();
+static void TryFindCCMInterface();
 static bool IsSelfUnlockingLua(const std::string& filePath, uint32_t appId);
 static bool __fastcall NotificationWrapperHook(void* thisptr, const char* methodName, void* request);
 static bool __fastcall NotificationDirectHook(void* thisptr, const char* methodName, void* bodyObj, int* flags);
@@ -429,25 +430,38 @@ void RemoveNamespaceApp(uint32_t appId) {
 // Replace the namespace-app set; reports add/remove counts for logging.
 void SetNamespaceApps(const uint32_t* appIds, uint32_t count,
                       size_t* outAdded, size_t* outRemoved) {
+    size_t addedForLog = 0;
+    size_t removedForLog = 0;
     std::unordered_set<uint32_t> next;
     next.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
         if (appIds[i] != 0) next.insert(appIds[i]);
     }
-    std::lock_guard<std::mutex> lock(g_namespaceAppsMutex);
-    if (outAdded) {
-        size_t added = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_namespaceAppsMutex);
         for (uint32_t id : next)
-            if (g_namespaceApps.count(id) == 0) ++added;
-        *outAdded = added;
-    }
-    if (outRemoved) {
-        size_t removed = 0;
+            if (g_namespaceApps.count(id) == 0) ++addedForLog;
         for (uint32_t id : g_namespaceApps)
-            if (next.count(id) == 0) ++removed;
-        *outRemoved = removed;
+            if (next.count(id) == 0) ++removedForLog;
+        g_namespaceApps = std::move(next);
     }
-    g_namespaceApps = std::move(next);
+    if (outAdded) *outAdded = addedForLog;
+    if (outRemoved) *outRemoved = removedForLog;
+
+    // Third-party hosts such as OpenSteamTool call CR_InitCloudSave before
+    // CR_SetApps, so namespace apps are empty during Init and the synchronous
+    // CClientUnifiedServiceTransport vtable hook is not installed there.
+    // Install it as soon as the host registers app IDs; otherwise Cloud RPC
+    // responses fall back to host packet-queue injection, which can time out in
+    // Steam's AC Launch coroutine while waiting for GetAppFileChangelist.
+    if (count > 0 && !g_vtableHookInstalled.load(std::memory_order_acquire)) {
+        LOG("[NS] Namespace apps updated (%u app(s), +%zu/-%zu); attempting service-method hook",
+            count, addedForLog, removedForLog);
+        std::thread([] {
+            Sleep(250);
+            TryFindCCMInterface();
+        }).detach();
+    }
 }
 
 // per-app launch timestamp for internal playtime tracking
@@ -672,10 +686,81 @@ bool RestoreLastPlayedState(uint32_t appId, uint64_t lastPlayed) {
 static std::atomic<uint64_t> g_steamId{0};
 static std::atomic<int32_t> g_sessionId{0};
 
+static void PublishAccountId(uint32_t accountId, const char* source);
+
 void SetAccountId(uint32_t accountId) {
-    // SteamID: universe=1, type=1, instance=1
-    uint64_t steamId = (uint64_t)accountId | (1ULL << 32) | (1ULL << 52) | (1ULL << 56);
-    g_steamId.store(steamId, std::memory_order_relaxed);
+    PublishAccountId(accountId, "host");
+}
+
+static uint64_t SteamId64FromAccountId(uint32_t accountId) {
+    return (uint64_t)accountId | (1ULL << 32) | (1ULL << 52) | (1ULL << 56);
+}
+
+static void PublishAccountId(uint32_t accountId, const char* source) {
+    if (accountId == 0) return;
+    uint64_t expected = 0;
+    uint64_t steamId = SteamId64FromAccountId(accountId);
+    if (g_steamId.compare_exchange_strong(expected, steamId,
+            std::memory_order_acq_rel, std::memory_order_acquire)) {
+        LOG("[Account] Captured accountId=%u from %s", accountId, source ? source : "unknown");
+        HttpServer::SetAccountId(accountId);
+    }
+}
+
+static uint64_t DetectMostRecentSteamIdFromLoginUsers() {
+    std::string path = g_steamPath + "config\\loginusers.vdf";
+    auto widePath = FileUtil::Utf8ToPath(path).wstring();
+    std::ifstream file(widePath, std::ios::binary);
+    if (!file) return 0;
+
+    std::string line;
+    uint64_t currentSteamId = 0;
+    uint64_t mostRecentSteamId = 0;
+    int braceDepth = 0;
+
+    while (std::getline(file, line)) {
+        std::string trimmed = line;
+        trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+
+        if (braceDepth == 1 && !trimmed.empty() && trimmed.front() == '"') {
+            size_t endQuote = trimmed.find('"', 1);
+            if (endQuote != std::string::npos) {
+                std::string key = trimmed.substr(1, endQuote - 1);
+                char* end = nullptr;
+                unsigned long long parsed = strtoull(key.c_str(), &end, 10);
+                if (end && *end == '\0' && parsed > 0) {
+                    currentSteamId = static_cast<uint64_t>(parsed);
+                }
+            }
+        }
+
+        if (currentSteamId != 0 &&
+            trimmed.find("\"MostRecent\"") != std::string::npos &&
+            trimmed.find("\"1\"") != std::string::npos) {
+            mostRecentSteamId = currentSteamId;
+        }
+
+        for (char ch : line) {
+            if (ch == '{') ++braceDepth;
+            else if (ch == '}') {
+                if (braceDepth == 2) currentSteamId = 0;
+                if (braceDepth > 0) --braceDepth;
+            }
+        }
+    }
+
+    return mostRecentSteamId;
+}
+
+static void SeedAccountIdFromLoginUsers() {
+    if (g_steamId.load(std::memory_order_acquire) != 0) return;
+    uint64_t steamId = DetectMostRecentSteamIdFromLoginUsers();
+    uint32_t accountId = static_cast<uint32_t>(steamId & 0xFFFFFFFFu);
+    if (accountId == 0) {
+        LOG("[Account] loginusers.vdf fallback did not find a MostRecent SteamID");
+        return;
+    }
+    PublishAccountId(accountId, "loginusers.vdf");
 }
 
 // recursion guard
@@ -871,6 +956,31 @@ static void TryFindCCMInterface() {
     if (!g_vtableHookInstalled.load(std::memory_order_acquire) && HasNamespaceApps()) {
         InstallServiceMethodHook();
     }
+}
+
+bool InstallVtableHooksForHost() {
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        LOG("[VtHook] Host install refused: shutting down");
+        return false;
+    }
+    if (!HasNamespaceApps()) {
+        LOG("[VtHook] Host install deferred: no namespace apps registered");
+        return false;
+    }
+    if (g_vtableHookInstalled.load(std::memory_order_acquire)) {
+        LOG("[VtHook] Host install requested: already active");
+        return true;
+    }
+
+    TryFindCCMInterface();
+    if (g_cmInterfaceFound.load(std::memory_order_acquire) &&
+        !g_vtableHookInstalled.load(std::memory_order_acquire)) {
+        InstallServiceMethodHook();
+    }
+
+    bool ok = g_vtableHookInstalled.load(std::memory_order_acquire);
+    LOG("[VtHook] Host install requested: active=%d", ok ? 1 : 0);
+    return ok;
 }
 
 // Approach D response injection: OnSendPkt enqueues; RecvPktMonitorHook drains on the network thread (valid Coroutine_Continue TLS).
@@ -1394,37 +1504,6 @@ static bool __fastcall ServiceMethodDirectHook(void* thisptr, const char* method
         return g_originalSlot4(thisptr, methodName, requestBody, responseBody, flags);
     }
 
-    // FileDownload: call original first (yields), then patch response with our URL.
-    if (strcmp(methodName, RPC_FILE_DOWNLOAD) == 0) {
-        DIAG("S4-CALLORIG method=%s app=%u -> yielding to Valve", methodName, appId);
-        bool origResult = g_originalSlot4(thisptr, methodName, requestBody, responseBody, flags);
-        DIAG("S4-ORIGRET method=%s app=%u result=%d -> patching", methodName, appId, origResult);
-        LOG("[Slot4] FileDownload app=%u: original returned %d, patching response", realAppId, origResult);
-
-        auto dispatched = DispatchCloudRpc(methodName, realAppId, innerFields);
-        if (!dispatched.has_value()) {
-            return origResult;
-        }
-        auto& result = *dispatched;
-
-        if (responseBody && result.body.Size() > 0) {
-            if (!ParseBytesToBody(responseBody, result.body.Data().data(), result.body.Size())) {
-                LOG("[Slot4] FileDownload: ParseFromArray failed, keeping original response");
-                return origResult;
-            }
-        }
-        if (flags) {
-            flags[2] = 1;
-            flags[3] = result.eresult;
-            flags[4] = 0;
-        }
-        DIAG("S4-EXIT-PATCHED method=%s app=%u eresult=%d bodyLen=%zu",
-             methodName, realAppId, result.eresult, result.body.Size());
-        LOG("[Slot4] FileDownload app=%u: patched (eresult=%d, %zu bytes)",
-            realAppId, result.eresult, result.body.Size());
-        return true;
-    }
-
     // NAMESPACE APP: handle locally, synchronously
     DIAG("S4-INTERCEPT method=%s app=%u reqLen=%zu", methodName, appId, reqBytes.size());
     LOG("[Slot4] INTERCEPT %s app=%u (%zu bytes):", methodName, appId, reqBytes.size());
@@ -1577,46 +1656,6 @@ static bool __fastcall ServiceMethodHook(void* thisptr, const char* methodName,
             LOG("[VtHook] %s app=%u: not namespace, passing through", methodName, appId);
         }
         return g_originalSlot5(thisptr, methodName, request, response, flags);
-    }
-
-    // FileDownload: call original first (yields), then patch response with our URL.
-    if (strcmp(methodName, RPC_FILE_DOWNLOAD) == 0) {
-        DIAG("S5-CALLORIG method=%s app=%u -> yielding to Valve", methodName, appId);
-        bool origResult = g_originalSlot5(thisptr, methodName, request, response, flags);
-        DIAG("S5-ORIGRET method=%s app=%u result=%d -> patching", methodName, appId, origResult);
-        LOG("[VtHook] FileDownload app=%u: original returned %d, patching response", realAppId, origResult);
-
-        auto dispatched = DispatchCloudRpc(methodName, realAppId, innerFields);
-        if (!dispatched.has_value()) {
-            return origResult;
-        }
-        auto& result = *dispatched;
-
-        void* respHeader = *(void**)((uintptr_t)response + 40);
-        void* respBody = *(void**)((uintptr_t)response + 48);
-        if (!respHeader || !respBody) {
-            LOG("[VtHook] FileDownload: null respHeader/respBody, keeping original");
-            return origResult;
-        }
-
-        if (result.body.Size() > 0) {
-            if (!ParseBytesToBody(respBody, result.body.Data().data(), result.body.Size())) {
-                LOG("[VtHook] FileDownload: ParseFromArray failed, keeping original");
-                return origResult;
-            }
-        }
-        SEH_WriteResponseHeader(respHeader, result.eresult);
-        if (flags) {
-            int32_t* f32 = reinterpret_cast<int32_t*>(flags);
-            f32[0] = 0;
-            f32[2] = 0;
-            f32[3] = result.eresult;
-        }
-        DIAG("S5-EXIT-PATCHED method=%s app=%u eresult=%d bodyLen=%zu",
-             methodName, realAppId, result.eresult, result.body.Size());
-        LOG("[VtHook] FileDownload app=%u: patched (eresult=%d, %zu bytes)",
-            realAppId, result.eresult, result.body.Size());
-        return true;
     }
 
     // NAMESPACE APP: handle locally
@@ -1975,6 +2014,55 @@ static void UploadPlaytimeOnExit(uint32_t appId) {
 
     if (ok) {
         CloudStorage::DeleteBlob(accountId, appId, kLegacyPlaytimeMetadataPath);
+    }
+}
+
+static void QueueMetadataUploadOnExit(uint32_t appId, const char* reason) {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    if (!MetadataSync::IsEnabled()) return;
+
+    std::string reasonText = reason ? reason : "host";
+    std::thread t([appId, reasonText] {
+        LOG("[HostNotify] metadata upload on exit for app %u (%s)", appId, reasonText.c_str());
+        if (g_syncAchievements) UploadStatsOnExit(appId);
+        if (g_syncPlaytime) UploadPlaytimeOnExit(appId);
+    });
+
+    std::lock_guard<std::mutex> lock(g_bgThreadsMutex);
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        t.detach();
+    } else {
+        g_bgThreads.push_back(std::move(t));
+    }
+}
+
+void NotifyHostAppRunning(uint32_t appId, bool running) {
+    if (appId == 0 || !IsNamespaceApp(appId)) return;
+
+    if (running) {
+        LOG("[HostNotify] app %u running", appId);
+        RecordLaunchTime(appId);
+        return;
+    }
+
+    LOG("[HostNotify] app %u stopped", appId);
+    QueueMetadataUploadOnExit(appId, "app-stopped");
+}
+
+void NotifyHostStatsStored(uint32_t appId) {
+    if (appId == 0 || !IsNamespaceApp(appId)) return;
+    if (!g_syncAchievements) return;
+
+    std::thread t([appId] {
+        LOG("[HostNotify] stats stored for app %u", appId);
+        UploadStatsOnExit(appId);
+    });
+
+    std::lock_guard<std::mutex> lock(g_bgThreadsMutex);
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        t.detach();
+    } else {
+        g_bgThreads.push_back(std::move(t));
     }
 }
 
@@ -3856,6 +3944,7 @@ void Init(const std::string& steamPath, bool cloudSaveOnly, CR_NotifyFn notifyCa
     g_steamPath = steamPath;
     if (!g_steamPath.empty() && g_steamPath.back() != '\\')
         g_steamPath += '\\';
+    SeedAccountIdFromLoginUsers();
 
     // Read Steam version for diagnostics and auto-update.
     uint64_t detectedVersion = ReadSteamVersion(g_steamPath);
@@ -4271,15 +4360,7 @@ void Init(const std::string& steamPath, bool cloudSaveOnly, CR_NotifyFn notifyCa
 
         } // !cloudSaveOnly (parental)
 
-        bool autoUpdate = cfg["auto_update_dll"].type == Json::Type::Bool
-            ? cfg["auto_update_dll"].boolean()
-            : !MetadataSync::steamToolsPresent.load(std::memory_order_relaxed);
-        if (autoUpdate) {
-            std::thread t(TryAutoUpdateDll);
-            std::lock_guard<std::mutex> lock(g_bgThreadsMutex);
-            g_bgThreads.push_back(std::move(t));
-            LOG("[NS] DLL auto-update enabled, checking in background");
-        }
+        LOG("[NS] DLL auto-update disabled in this build");
     } else {
         LOG("[NS] No config.json at %s -- local-only mode", configPath.c_str());
     }

@@ -348,6 +348,11 @@ static void WorkerLoop(int threadId) {
                         success = true;
                         break;
                     }
+                    if (exists == ICloudProvider::ExistsStatus::Error && !item.bestEffort) {
+                        LOG("[CloudStorage] BG upload existence check failed [%d], "
+                            "trying direct commit upload: %s",
+                            threadId, item.cloudPath.c_str());
+                    } else
                     if (exists == ICloudProvider::ExistsStatus::Error && item.existsCheckRetries++ < 3) {
                         LOG("[CloudStorage] BG upload deferred after existence check failure [%d]: %s",
                             threadId, item.cloudPath.c_str());
@@ -361,7 +366,7 @@ static void WorkerLoop(int threadId) {
                         if (!requeued) droppedAsStale = true;
                         break;
                     }
-                    if (exists == ICloudProvider::ExistsStatus::Error) {
+                    else if (exists == ICloudProvider::ExistsStatus::Error) {
                         LOG("[CloudStorage] BG upload abandoned after repeated existence check failures [%d]: %s",
                             threadId, item.cloudPath.c_str());
                         OnCloudFailure("Exists", item.cloudPath);

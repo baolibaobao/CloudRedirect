@@ -20,10 +20,12 @@ struct RemotecacheCandidate {
 uint32_t TokenToRootId(const std::string& token);
 
 // Pure transform: given existing remotecache.vdf text and a candidate list for
-// `appId`, return the rewritten text and how many new entries were added.
-// Existing entries are never modified - Steam owns their lifecycle. Returns
-// false if `original` lacks the expected top-level "<appId>" section, in which
-// case `outRepaired` is left equal to `original` and `outAdded == 0`.
+// `appId`, return the rewritten text and how many entries were normalized.
+// Existing entries are only modified when their SHA already matches the cloud
+// candidate, which lets us clear stale Steam dirty state without masking real
+// local save changes. Returns false if `original` lacks the expected top-level
+// "<appId>" section, in which case `outRepaired` is left equal to `original`
+// and `outAdded == 0`.
 bool ApplyRemotecacheRepair(const std::string& original,
                             uint32_t appId,
                             const std::vector<RemotecacheCandidate>& candidates,

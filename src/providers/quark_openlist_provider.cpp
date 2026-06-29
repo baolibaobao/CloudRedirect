@@ -317,14 +317,31 @@ bool QuarkOpenListProvider::Upload(const std::string& path, const uint8_t* data,
     std::lock_guard<std::mutex> lock(m_mutex);
     auto remote = RemotePathFor(path); if (remote.empty()) return false;
     if (!Mkdir(ParentPath(remote))) return false;
+    auto uploadedVisible = [&]() {
+        auto check = ApiRequest("POST", "/api/fs/get",
+            Obj({{"path", Json::String(remote)}, {"password", Json::String("")},
+                 {"refresh", Json::Value{Json::Type::Bool, true}}}));
+        if (check.status != 200) return false;
+        auto j = Json::Parse(check.body);
+        if (!HasOpenListSuccess(j)) return false;
+        auto& meta = j["data"];
+        if (meta["is_dir"].boolean()) return false;
+        return static_cast<uint64_t>(meta["size"].integer()) == static_cast<uint64_t>(len);
+    };
     std::string body(reinterpret_cast<const char*>(data), len);
+    RemoveRemote(remote);
     auto r = RequestUrl("PUT", m_config.baseUrl + "/api/fs/put", body,
-                        {"File-Path: " + UrlEncode(remote, false), "Content-Type: application/octet-stream"});
-    if (r.status == 200 && HasOpenListSuccess(Json::Parse(r.body))) return true;
+                        {"File-Path: " + remote, "Content-Type: application/octet-stream"});
+    if (r.status == 200 && HasOpenListSuccess(Json::Parse(r.body))) {
+        if (uploadedVisible()) return true;
+        LOG("[Quark] Upload returned success but file was not visible, retrying: %s",
+            remote.c_str());
+    }
     RemoveRemote(remote);
     r = RequestUrl("PUT", m_config.baseUrl + "/api/fs/put", body,
-                   {"File-Path: " + UrlEncode(remote, false), "Content-Type: application/octet-stream"});
-    return r.status == 200 && HasOpenListSuccess(Json::Parse(r.body));
+                   {"File-Path: " + remote, "Content-Type: application/octet-stream"});
+    if (r.status != 200 || !HasOpenListSuccess(Json::Parse(r.body))) return false;
+    return uploadedVisible();
 }
 
 bool QuarkOpenListProvider::BuildDownloadCandidates(const Json::Value& data, const std::string& remotePath,

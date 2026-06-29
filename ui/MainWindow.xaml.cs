@@ -26,7 +26,6 @@ public partial class MainWindow : FluentWindow
             {
                 SystemThemeWatcher.Watch(this);
 
-                _ = CheckForAutoUpdateAsync();
 
                 var mode = await Task.Run(() => Services.SteamDetector.ReadModeSetting());
                 ApplyMode(mode);

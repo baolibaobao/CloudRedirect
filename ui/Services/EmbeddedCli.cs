@@ -12,6 +12,13 @@ internal static class EmbeddedCli
 
     public static string? EnsureExtracted()
     {
+        string appDirCli = Path.Combine(AppContext.BaseDirectory, "cloud_redirect_cli.exe");
+        if (File.Exists(appDirCli))
+        {
+            _cachedExtractedPath = appDirCli;
+            return appDirCli;
+        }
+
         if (_cachedExtractedPath != null && File.Exists(_cachedExtractedPath))
             return _cachedExtractedPath;
 
@@ -26,18 +33,16 @@ internal static class EmbeddedCli
 
         string exePath = Path.Combine(baseDir, "cloud_redirect_cli.exe");
         string dllPath = Path.Combine(baseDir, "cloud_redirect.dll");
-        if (!File.Exists(exePath))
+        cliStream.Position = 0;
+        using (var ms = new MemoryStream(checked((int)cliStream.Length)))
         {
-            cliStream.Position = 0;
-            using var ms = new MemoryStream(checked((int)cliStream.Length));
             cliStream.CopyTo(ms);
             FileUtils.AtomicWriteAllBytes(exePath, ms.ToArray());
         }
 
-        if (!File.Exists(dllPath))
+        dllStream.Position = 0;
+        using (var ms = new MemoryStream(checked((int)dllStream.Length)))
         {
-            dllStream.Position = 0;
-            using var ms = new MemoryStream(checked((int)dllStream.Length));
             dllStream.CopyTo(ms);
             FileUtils.AtomicWriteAllBytes(dllPath, ms.ToArray());
         }

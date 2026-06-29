@@ -59,6 +59,14 @@ bool IsNamespaceApp(uint32_t appId);
 void SetNamespaceApps(const uint32_t* appIds, uint32_t count,
                       size_t* outAdded, size_t* outRemoved);
 
+// OpenSteamTool host bridge: force/schedule synchronous service-method hooks
+// after the host has loaded this DLL and registered namespace apps.
+bool InstallVtableHooksForHost();
+
+// OpenSteamTool host bridge: app/stat lifecycle signals used for metadata sync.
+void NotifyHostAppRunning(uint32_t appId, bool running);
+void NotifyHostStatsStored(uint32_t appId);
+
 // signal shutdown
 void Shutdown();
 

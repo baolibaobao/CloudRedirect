@@ -869,7 +869,7 @@ static bool EnsureAndMarkRemotecacheRepaired(
         return false;
     }
 
-    LOG("[NS-RC] Repaired remotecache.vdf for app %u: added %zu missing entries",
+    LOG("[NS-RC] Repaired remotecache.vdf for app %u: normalized %zu entries",
         appId, added);
     std::lock_guard<std::mutex> lock(g_remotecacheRepairMutex);
     auto& planted = g_remotecachePlantedRows[appKey];
@@ -883,7 +883,7 @@ static void ScheduleDeferredRemotecacheRepair(
     if (candidates.empty()) return;
 
     std::thread([accountId, appId, candidates]() {
-        constexpr int delaysMs[] = { 1500, 5000, 12000 };
+        constexpr int delaysMs[] = { 1500, 5000, 12000, 25000, 35000 };
         for (int delayMs : delaysMs) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
             if (EnsureAndMarkRemotecacheRepaired(accountId, appId, candidates, true)) {
@@ -892,6 +892,20 @@ static void ScheduleDeferredRemotecacheRepair(
             }
         }
     }).detach();
+}
+
+static void ClearStalePendingUploadsIfCloudCaughtUp(uint32_t accountId,
+                                                    uint32_t appId,
+                                                    uint64_t cloudCN,
+                                                    const char* reason) {
+    uint64_t localCN = LocalStorage::GetChangeNumber(accountId, appId);
+    if (cloudCN < localCN) return;
+
+    if (PendingOpsJournal::ClearUploadOperations(accountId, appId)) {
+        LOG("[Journal] Cleared stale upload pending for app %u (%s, cloudCN=%llu localCN=%llu)",
+            appId, reason ? reason : "cloud caught up",
+            (unsigned long long)cloudCN, (unsigned long long)localCN);
+    }
 }
 
 static bool MarkSteamRemotecacheSynced(uint32_t accountId, uint32_t appId,
@@ -1373,6 +1387,8 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
                 CloudStorage::SaveManifestLocal(accountId, appId, cloudManifest);
                 LocalStorage::SetChangeNumber(accountId, appId, state.cn);
             }
+            ClearStalePendingUploadsIfCloudCaughtUp(accountId, appId, state.cn,
+                "changelist cloud state");
 
             LOG("[NS-CL] GetAppFileChangelist app=%u: cloud state CN=%llu (%zu files)",
                 appId, cloudCN, cloudManifest.size());
@@ -1414,10 +1430,48 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
         PruneSteamRemoteCacheToManifest(accountId, appId, cloudManifest);
     }
 
-    // Async AutoCloud bootstrap; set is_only_delta=1 if active.
+    // AutoCloud bootstrap refreshes local disk changes into the redirected
+    // cloud before Steam decides whether it must run its own upload path.
+    // When Steam and the cloud are already at the same CN, waiting here lets
+    // an exit-time local save advance CN first, so Steam sees the fresh
+    // manifest as already synchronized instead of starting an upload that may
+    // time out before it PUTs to the local redirect URL.
     SetRpcCrashContext("GetChangelist:bootstrap", "Cloud.GetAppFileChangelist#1", appId);
-    AutoCloudBootstrap::Bootstrap(accountId, appId, /*wait=*/false);
+    bool waitForLocalAutoCloudRefresh =
+        CloudStorage::IsCloudActive() && haveCloudManifest && cloudCN > 0 &&
+        clientChangeNumber == cloudCN;
+    bool preRefreshAdvanced = false;
+    if (waitForLocalAutoCloudRefresh) {
+        AutoCloudBootstrap::ResetAttempted(accountId, appId);
+    }
+    AutoCloudBootstrap::Bootstrap(accountId, appId, waitForLocalAutoCloudRefresh);
     bool bootstrapActive = AutoCloudBootstrap::IsActive(accountId, appId);
+    if (waitForLocalAutoCloudRefresh) {
+        uint64_t refreshedLocalCN = LocalStorage::GetChangeNumber(accountId, appId);
+        if (refreshedLocalCN > cloudCN) {
+            auto refreshedManifest = CloudStorage::LoadLocalManifest(accountId, appId);
+            if (!refreshedManifest.empty()) {
+                LOG("[NS-CL] GetAppFileChangelist app=%u: AutoCloud pre-refresh advanced CN %llu -> %llu",
+                    appId, (unsigned long long)cloudCN,
+                    (unsigned long long)refreshedLocalCN);
+                cloudCN = refreshedLocalCN;
+                cloudManifest = std::move(refreshedManifest);
+                cloudFileEntries.clear();
+                for (const auto& [name, me] : cloudManifest) {
+                    CloudStorage::FileEntry fe;
+                    fe.sha = me.sha;
+                    fe.timestamp = me.timestamp;
+                    fe.size = me.size;
+                    cloudFileEntries[name] = std::move(fe);
+                }
+                haveCloudManifest = true;
+                cloudStateMissing = false;
+                cloudStateFetchFailed = false;
+                MarkSteamRemotecacheSynced(accountId, appId, refreshedLocalCN);
+                preRefreshAdvanced = true;
+            }
+        }
+    }
 
     if (CloudStorage::IsCloudActive() && (cloudCN == 0 || cloudStateMissing) && !cloudStateFetchFailed && !bootstrapActive) {
         SetRpcCrashContext("GetChangelist:promote-local", "Cloud.GetAppFileChangelist#1", appId);
@@ -1473,6 +1527,7 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     uint64_t serverChangeNumber = 0;  // Initialize to prevent UB in edge cases
     bool responseIsDelta = true;
     bool suppressSameCnFullManifestAfterRepair = false;
+    bool sameCnInventoryDelta = false;
 
     if (haveCloudManifest && cloudManifest.empty() && cloudCN == 0) {
         // New app at CN=0 -- return empty authoritative inventory
@@ -1482,30 +1537,10 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
             appId, cloudCN);
     } else if (haveCloudManifest && !cloudManifest.empty()) {
         SetRpcCrashContext("GetChangelist:manifest-delta", "Cloud.GetAppFileChangelist#1", appId);
-        // Steam-faithful delta: compute diff between clientCN snapshot and current manifest.
-        // Steam's server returns only changed files -- not the full inventory.
-        auto delta = CloudStorage::ComputeManifestDelta(accountId, appId,
-                                                         clientChangeNumber, cloudCN,
-                                                         cloudManifest);
-        if (!delta.files.empty()) {
-            serverChangeNumber = delta.serverCN;
-            responseIsDelta = true;
-            for (auto& fc : delta.files) {
-                if (IsReservedBlobFilename(fc.filename)) continue;
-                LocalStorage::FileEntry fe;
-                fe.filename = std::move(fc.filename);
-                fe.sha = std::move(fc.sha);
-                fe.timestamp = fc.timestamp;
-                fe.rawSize = fc.size;
-                fe.deleted = fc.deleted;
-                files.push_back(std::move(fe));
-            }
-            LOG("[NS-CL] GetAppFileChangelist app=%u delta clientCN=%llu serverCN=%llu (%zu changed)",
-                appId, clientChangeNumber, cloudCN, files.size());
-        } else {
+        if (preRefreshAdvanced) {
             serverChangeNumber = cloudCN;
             responseIsDelta = false;
-            suppressSameCnFullManifestAfterRepair = (clientChangeNumber == cloudCN);
+            suppressSameCnFullManifestAfterRepair = true;
 
             for (const auto& [filename, entry] : cloudManifest) {
                 if (IsReservedBlobFilename(filename)) continue;
@@ -1517,16 +1552,62 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
                 fe.deleted = false;
                 files.push_back(std::move(fe));
             }
+            LOG("[NS-CL] GetAppFileChangelist app=%u: pre-refresh already published CN=%llu; "
+                "repairing remotecache then returning empty delta",
+                appId, cloudCN);
+        } else {
+            // Steam-faithful delta: compute diff between clientCN snapshot and current manifest.
+            // Steam's server returns only changed files -- not the full inventory.
+            auto delta = CloudStorage::ComputeManifestDelta(accountId, appId,
+                                                             clientChangeNumber, cloudCN,
+                                                             cloudManifest);
+            if (!delta.files.empty()) {
+                serverChangeNumber = delta.serverCN;
+                responseIsDelta = true;
+                for (auto& fc : delta.files) {
+                    if (IsReservedBlobFilename(fc.filename)) continue;
+                    LocalStorage::FileEntry fe;
+                    fe.filename = std::move(fc.filename);
+                    fe.sha = std::move(fc.sha);
+                    fe.timestamp = fc.timestamp;
+                    fe.rawSize = fc.size;
+                    fe.deleted = fc.deleted;
+                    files.push_back(std::move(fe));
+                }
+                LOG("[NS-CL] GetAppFileChangelist app=%u delta clientCN=%llu serverCN=%llu (%zu changed)",
+                    appId, clientChangeNumber, cloudCN, files.size());
+            } else {
+                serverChangeNumber = cloudCN;
+                responseIsDelta = clientChangeNumber == cloudCN;
+                sameCnInventoryDelta = responseIsDelta;
+                suppressSameCnFullManifestAfterRepair = sameCnInventoryDelta;
 
-            {
-                const uint64_t cacheKey = MakeAppAccountKey(accountId, appId);
-                std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
-                g_fullManifestSentApps.insert(cacheKey);
-                g_cachedCloudCN[cacheKey] = cloudCN;
-                g_cachedAppBuildIdHwm[cacheKey] = appBuildIdHwm;
+                for (const auto& [filename, entry] : cloudManifest) {
+                    if (IsReservedBlobFilename(filename)) continue;
+                    LocalStorage::FileEntry fe;
+                    fe.filename = filename;
+                    fe.sha = entry.sha;
+                    fe.timestamp = entry.timestamp;
+                    fe.rawSize = entry.size;
+                    fe.deleted = false;
+                    files.push_back(std::move(fe));
+                }
+
+                {
+                    const uint64_t cacheKey = MakeAppAccountKey(accountId, appId);
+                    std::lock_guard<std::mutex> lock(g_fullManifestSentMutex);
+                    g_fullManifestSentApps.insert(cacheKey);
+                    g_cachedCloudCN[cacheKey] = cloudCN;
+                    g_cachedAppBuildIdHwm[cacheKey] = appBuildIdHwm;
+                }
+                if (sameCnInventoryDelta) {
+                    LOG("[NS-CL] GetAppFileChangelist app=%u: same CN, repairing local inventory then returning empty delta",
+                        appId);
+                } else {
+                    LOG("[NS-CL] GetAppFileChangelist app=%u: returning full manifest (%zu files) at CN=%llu (clientCN=%llu, no delta)",
+                        appId, files.size(), cloudCN, clientChangeNumber);
+                }
             }
-            LOG("[NS-CL] GetAppFileChangelist app=%u: returning full manifest (%zu files) at CN=%llu (clientCN=%llu, no delta)",
-                appId, files.size(), cloudCN, clientChangeNumber);
         }
     } else {
         // No cloud manifest -- serve local files as delta (don't trigger reconcile-deletes)
@@ -1742,13 +1823,14 @@ RpcResult HandleGetChangelist(uint32_t appId, const std::vector<PB::Field>& reqB
     // build-list path times out because the local cache table lacks rows for
     // files we advertise. Seed only missing, already-synced rows for a full
     // authoritative response; delta responses remain Steam-owned.
-    if (!responseIsDelta && !remotecacheCandidates.empty()) {
+    if ((!responseIsDelta || sameCnInventoryDelta) && !remotecacheCandidates.empty()) {
         EnsureAndMarkRemotecacheRepaired(accountId, appId, remotecacheCandidates);
         ScheduleDeferredRemotecacheRepair(accountId, appId, remotecacheCandidates);
     }
 
     if (suppressSameCnFullManifestAfterRepair) {
-        LOG("[NS-CL] GetAppFileChangelist app=%u: client CN matches server CN=%llu; remotecache repaired, returning empty delta",
+        LOG("[NS-CL] GetAppFileChangelist app=%u: client CN matches server CN=%llu; "
+            "remotecache repaired, returning empty delta",
             appId, serverChangeNumber);
         prepared.clear();
         prefixList.clear();
@@ -2169,6 +2251,10 @@ RpcResult HandleLaunchIntent(uint32_t appId, const std::vector<PB::Field>& reqBo
     CloudStorage::StateFetchResult stateResult;
     if (CloudStorage::IsCloudActive()) {
         stateResult = CloudStorage::FetchCloudState(accountId, appId);
+        if (stateResult.status == CloudStorage::StateFetchStatus::Ok) {
+            ClearStalePendingUploadsIfCloudCaughtUp(accountId, appId,
+                stateResult.state.cn, "launch intent");
+        }
     }
 
     ConsumeConflictLocalChoice(appId);

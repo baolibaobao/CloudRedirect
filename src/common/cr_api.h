@@ -43,4 +43,14 @@ CR_API bool CR_IsApp(uint32_t appId);
 // Replace the namespace-app set with the given list. NULL/0 clears it.
 CR_API void CR_SetApps(const uint32_t* appIds, uint32_t count);
 
+// Optional OpenSteamTool host integration (2.2.5+ compatible ABI).
+// Installs Cloud RPC vtable hooks inside Steam for synchronous responses.
+CR_API bool CR_InstallVtableHooks(void);
+
+// Host lifecycle/stat notifications. The actual metadata sync switches remain
+// controlled by CloudRedirect's config; the host only supplies timing signals.
+CR_API void CR_EnableStatsSync(bool achievements, bool playtime);
+CR_API void CR_NotifyAppRunning(uint32_t appId, bool running);
+CR_API void CR_NotifyStatsStored(uint32_t appId);
+
 CR_API void CR_Shutdown(void);

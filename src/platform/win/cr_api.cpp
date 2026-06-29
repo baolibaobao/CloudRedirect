@@ -5,9 +5,12 @@
 #include "protobuf.h"
 #include "pending_ops_journal.h"
 #include "app_state.h"
+#include "cloud_storage.h"
+#include "local_storage.h"
 #include "log.h"
 #include "file_util.h"
 #include "http_server.h"
+#include "metadata_sync.h"
 
 #include <atomic>
 #include <mutex>
@@ -94,6 +97,19 @@ bool CR_HandleCloudRpc(const char* method, uint32_t appId,
             if (auto* f = PB::FindField(fields, 3)) uploadsCompleted = f->varintVal != 0;
             if (auto* f = PB::FindField(fields, 4)) uploadsRequired = f->varintVal != 0;
             if (accountId != 0) {
+                if (!uploadsCompleted && uploadsRequired && CloudStorage::IsCloudActive()) {
+                    auto stateResult = CloudStorage::FetchCloudState(accountId, appId);
+                    if (stateResult.status == CloudStorage::StateFetchStatus::Ok) {
+                        uint64_t localCN = LocalStorage::GetChangeNumber(accountId, appId);
+                        if (stateResult.state.cn >= localCN) {
+                            uploadsCompleted = true;
+                            uploadsRequired = false;
+                            LOG("[CR_API] ExitSyncDone app=%u: suppressing stale pending upload (cloudCN=%llu localCN=%llu)",
+                                appId, (unsigned long long)stateResult.state.cn,
+                                (unsigned long long)localCN);
+                        }
+                    }
+                }
                 PendingOpsJournal::RecordExitSyncState(accountId, appId,
                     uploadsCompleted, uploadsRequired, clientId);
                 CloudStorage::ReleaseCloudSession(accountId, appId, clientId);
@@ -140,6 +156,31 @@ void CR_SetApps(const uint32_t* appIds, uint32_t count) {
     if (g_crInitDone.load(std::memory_order_acquire))
         LOG("[CR_API] SetApps: %u app(s) (%zu added, %zu removed)",
             count, added, removed);
+}
+
+bool CR_InstallVtableHooks(void) {
+    if (!g_crInitDone.load(std::memory_order_acquire)) return false;
+    bool ok = CloudIntercept::InstallVtableHooksForHost();
+    LOG("[CR_API] InstallVtableHooks requested -> %d", ok);
+    return ok;
+}
+
+void CR_EnableStatsSync(bool achievements, bool playtime) {
+    if (!g_crInitDone.load(std::memory_order_acquire)) return;
+    LOG("[CR_API] EnableStatsSync host=%d/%d config=%d/%d",
+        achievements ? 1 : 0, playtime ? 1 : 0,
+        MetadataSync::syncAchievements.load(std::memory_order_relaxed) ? 1 : 0,
+        MetadataSync::syncPlaytime.load(std::memory_order_relaxed) ? 1 : 0);
+}
+
+void CR_NotifyAppRunning(uint32_t appId, bool running) {
+    if (!g_crInitDone.load(std::memory_order_acquire)) return;
+    CloudIntercept::NotifyHostAppRunning(appId, running);
+}
+
+void CR_NotifyStatsStored(uint32_t appId) {
+    if (!g_crInitDone.load(std::memory_order_acquire)) return;
+    CloudIntercept::NotifyHostStatsStored(appId);
 }
 
 void CR_Shutdown(void) {

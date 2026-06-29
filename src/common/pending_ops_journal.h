@@ -44,6 +44,7 @@ std::vector<Entry> LoadPending(uint32_t accountId, uint32_t appId);
 std::optional<Entry> LoadCurrentSession(uint32_t accountId, uint32_t appId);
 bool HasPendingUpload(uint32_t accountId, uint32_t appId);
 void ClearUploadPending(uint32_t accountId, uint32_t appId);
+bool ClearUploadOperations(uint32_t accountId, uint32_t appId);
 void ClearPending(uint32_t accountId, uint32_t appId);
 
 } // namespace PendingOpsJournal

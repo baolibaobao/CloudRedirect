@@ -8,30 +8,6 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
         <StackPanel MaxWidth="800">
 
-            <Border x:Name="UpdateBanner"
-                    Visibility="Collapsed"
-                    Background="#332F7A2F"
-                    BorderBrush="#FF6A9F42"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="16"
-                    Margin="0,0,0,16">
-                <DockPanel>
-                    <ui:Button Content="{res:Loc Dashboard_UpdateNow}"
-                               Appearance="Success"
-                               DockPanel.Dock="Right"
-                               VerticalAlignment="Center"
-                               Click="UpdateDll_Click" />
-                    <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                        <TextBlock Text="{res:Loc Dashboard_UpdateAvailable}"
-                                   FontWeight="SemiBold" FontSize="14"
-                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Text="{res:Loc Dashboard_UpdateAvailableDescription}"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                </DockPanel>
-            </Border>
-
             <TextBlock Text="{res:Loc Dashboard_Title}"
                        FontSize="28" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"

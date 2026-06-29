@@ -175,7 +175,7 @@ public partial class SettingsPage : Page
             if (root.TryGetProperty("auto_update_dll", out var u))
                 autoUpdateDll = u.ValueKind == JsonValueKind.True;
             else
-                autoUpdateDll = true; // default on when key absent
+                autoUpdateDll = false;
             if (root.TryGetProperty("parental_ignore_playtime", out var pip) && pip.ValueKind == JsonValueKind.True)
                 parentalIgnorePlaytime = true;
             if (root.TryGetProperty("parental_bypass_playtime", out var pbp) && pbp.ValueKind == JsonValueKind.True)
