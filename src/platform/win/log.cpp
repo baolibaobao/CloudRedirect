@@ -9,8 +9,9 @@ namespace Log {
 static FILE* g_file = nullptr;
 static std::mutex g_mutex;
 static std::string g_logPath;
+static bool g_verbose = false;
 
-static constexpr long MAX_LOG_SIZE = 10 * 1024 * 1024;
+static constexpr long MAX_LOG_SIZE = 2 * 1024 * 1024;
 
 // Records up to STACK_BUF bytes go through a stack buffer with no heap
 // allocation; longer records (rare - a stack trace dump or a serialized
@@ -26,6 +27,67 @@ static FILE* OpenLog(const std::string& utf8Path) {
     if (wPath.empty()) return nullptr;
     // path::c_str() returns wchar_t* on Windows - exactly what _wfopen wants.
     return _wfopen(wPath.c_str(), L"ab");
+}
+
+static bool IsTruthyEnv(const char* name) {
+    char value[32] = {};
+    DWORD len = GetEnvironmentVariableA(name, value, (DWORD)sizeof(value));
+    if (len == 0 || len >= sizeof(value)) return false;
+    return _stricmp(value, "1") == 0 ||
+           _stricmp(value, "true") == 0 ||
+           _stricmp(value, "yes") == 0 ||
+           _stricmp(value, "on") == 0;
+}
+
+static bool ContainsI(std::string_view haystack, std::string_view needle) {
+    if (needle.empty() || haystack.size() < needle.size()) return false;
+    for (size_t i = 0; i <= haystack.size() - needle.size(); ++i) {
+        size_t j = 0;
+        for (; j < needle.size(); ++j) {
+            unsigned char a = (unsigned char)haystack[i + j];
+            unsigned char b = (unsigned char)needle[j];
+            if (tolower(a) != tolower(b)) break;
+        }
+        if (j == needle.size()) return true;
+    }
+    return false;
+}
+
+static bool ShouldWriteQuiet(std::string_view msg) {
+    if (g_verbose) return true;
+
+    static constexpr std::string_view critical[] = {
+        "failed", "failure", "error", "warning", "warn", "rejected", "blocked",
+        "aborting", "abort", "timed out", "timeout", "unavailable", "missing",
+        "invalid", "too large", "too deep", "exhausted", "mismatch", "collision",
+        "path traversal", "not found", "cannot", "could not", "refusing",
+        "stale", "retry", "rollback", "incompatible", "crash"
+    };
+    for (auto needle : critical) {
+        if (ContainsI(msg, needle)) return true;
+    }
+
+    static constexpr std::string_view lifecycle[] = {
+        "CloudRedirect loaded", "CloudRedirect unloaded", "CR_InitCloudSave complete",
+        "Cloud provider", "initialized", "Shutdown", "InstallVtableHooks",
+        "EnableStatsSync", "SetApps:"
+    };
+    for (auto needle : lifecycle) {
+        if (ContainsI(msg, needle)) return true;
+    }
+
+    static constexpr std::string_view syncSummaries[] = {
+        "LaunchIntent", "ExitSyncDone", "CompleteBatch", "BeginBatch",
+        "PublishCloudState", "ReleaseCloudSession", "Imported ",
+        "restored ", "Merged stats", "No local stats", "Token refreshed",
+        "Synced refreshed OpenList cookie", "UploadBatch:", "state published",
+        "session acquired", "acquired session", "session cleared"
+    };
+    for (auto needle : syncSummaries) {
+        if (ContainsI(msg, needle)) return true;
+    }
+
+    return false;
 }
 
 // Single-fwrite record emission. Caller must hold g_mutex.
@@ -64,6 +126,7 @@ static void RotateIfNeeded() {
 void Init(const char* path) {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_logPath = path ? path : "";
+    g_verbose = IsTruthyEnv("CLOUDREDIRECT_VERBOSE_LOG");
     g_file = OpenLog(g_logPath);
     if (g_file) {
         time_t t = time(nullptr);
@@ -71,9 +134,10 @@ void Init(const char* path) {
         localtime_s(&lt, &t);
         char buf[128];
         int n = snprintf(buf, sizeof(buf),
-                         "\n=== CloudRedirect loaded at %04d-%02d-%02d %02d:%02d:%02d ===\n",
+                         "\n=== CloudRedirect loaded at %04d-%02d-%02d %02d:%02d:%02d (%s log) ===\n",
                          lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday,
-                         lt.tm_hour, lt.tm_min, lt.tm_sec);
+                         lt.tm_hour, lt.tm_min, lt.tm_sec,
+                         g_verbose ? "verbose" : "quiet");
         if (n > 0) WriteRecord(buf, (size_t)n);
     }
 }
@@ -142,6 +206,10 @@ void Write(const char* fmt, ...) {
     va_end(argsCopy);
 
     size_t total = (size_t)prefix + (size_t)bodyLen;
+    if (!ShouldWriteQuiet(std::string_view(buf + prefix, (size_t)bodyLen))) {
+        return;
+    }
+
     buf[total++] = '\n';
     WriteRecord(buf, total);
 }

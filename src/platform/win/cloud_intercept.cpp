@@ -2127,9 +2127,11 @@ static bool __fastcall NotificationWrapperHook(void* thisptr, const char* method
         return g_originalSlot8(thisptr, methodName, request);
     }
 
-    // ExitSyncDone: let Steam's internal processing fire so it updates
-    // remotecache.vdf with the CN from BeginAppUploadBatch. The notification
-    // reaches Valve with a namespace app ID it has no record for -- harmless.
+    // ExitSyncDone: finish CloudRedirect's local bookkeeping, then suppress the
+    // notification. CompleteBatch already updates remotecache.vdf/cloud state;
+    // passing the namespace app notification through lets Steam contact Valve
+    // for an app it cannot resolve, causing a transient "cloud sync failed"
+    // that disappears on manual retry.
     if (strcmp(methodName, RPC_EXIT_SYNC) == 0) {
         auto bodyBytes = SerializeBodyToBytes(bodyObj);
         auto fields = PB::Parse(bodyBytes.data(), bodyBytes.size());
@@ -2159,8 +2161,8 @@ static bool __fastcall NotificationWrapperHook(void* thisptr, const char* method
                 g_bgThreads.push_back(std::move(t));
             }
         }
-        LOG("[VtHook-Notif] %s app=%u: letting Steam process internally", methodName, realAppId);
-        return g_originalSlot8(thisptr, methodName, request);
+        LOG("[VtHook-Notif] SUPPRESSED %s app=%u after local exit sync", methodName, realAppId);
+        return true;
     }
 
     // ConflictResolution: parse chose_local_files so HandleLaunchIntent
@@ -2229,9 +2231,8 @@ static bool __fastcall NotificationDirectHook(void* thisptr, const char* methodN
         return g_originalSlot7(thisptr, methodName, bodyObj, flags);
     }
 
-    // ExitSyncDone: let Steam's internal processing fire so it updates
-    // remotecache.vdf with the CN from BeginAppUploadBatch. The notification
-    // reaches Valve with a namespace app ID it has no record for -- harmless.
+    // ExitSyncDone direct cascade from slot 8: local bookkeeping is already
+    // done by NotificationWrapperHook, so suppress the duplicate send.
     if (strcmp(methodName, RPC_EXIT_SYNC) == 0) {
         auto bodyBytes = SerializeBodyToBytes(bodyObj);
         auto fields = PB::Parse(bodyBytes.data(), bodyBytes.size());
@@ -2249,8 +2250,8 @@ static bool __fastcall NotificationDirectHook(void* thisptr, const char* methodN
             // (NotificationWrapperHook). Slot 7 is a cascade from the same
             // notification -- don't duplicate cloud I/O.
         }
-        LOG("[VtHook-Notif] %s app=%u (direct): cascade from slot 8, passing through", methodName, realAppId);
-        return g_originalSlot7(thisptr, methodName, bodyObj, flags);
+        LOG("[VtHook-Notif] SUPPRESSED %s app=%u (direct exit sync)", methodName, realAppId);
+        return true;
     }
 
     // ConflictResolution: parse chose_local_files so HandleLaunchIntent
